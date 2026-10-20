@@ -59,10 +59,10 @@ export const accounts = pgTable('accounts', {
 export const storageUsage = pgTable('storage_usage', {
   accountId: uuid('account_id').primaryKey().references(() => accounts.id, { onDelete: 'cascade' }),
   totalBytes: bigint('total_bytes', { mode: 'bigint' }),
-  usedBytes: bigint('used_bytes', { mode: 'bigint' }).notNull().default(0n),
+  usedBytes: bigint('used_bytes', { mode: 'bigint' }).notNull().default(sql`0`),
   availableBytes: bigint('available_bytes', { mode: 'bigint' }),
-  trashBytes: bigint('trash_bytes', { mode: 'bigint' }).notNull().default(0n),
-  reservedBytes: bigint('reserved_bytes', { mode: 'bigint' }).notNull().default(0n),
+  trashBytes: bigint('trash_bytes', { mode: 'bigint' }).notNull().default(sql`0`),
+  reservedBytes: bigint('reserved_bytes', { mode: 'bigint' }).notNull().default(sql`0`),
   syncedAt: timestamp('synced_at', { withTimezone: true }),
 });
 

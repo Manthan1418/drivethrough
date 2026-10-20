@@ -7,7 +7,7 @@
 - **Keyless auth refactor (2026-10-20, owner-triggered)** — org policy `iam.disableServiceAccountKeyCreation` made service-account JSON impossible → `firebase-admin` replaced by `jose` + Google's public JWKS in `auth/verify.ts` (signature + iss/aud/exp/sub per Google's manual checklist, 30 s clock tolerance); `checkRevoked` retired → the token's ≤1 h TTL is the revocation bound; env line `FIREBASE_SERVICE_ACCOUNT_JSON` retired (your shopping list shrinks to GOOGLE_CLIENT_ID/SECRET only).
 - **Verification gates — ALL GREEN (2026-10-20)** — `npm install` (root workspaces, 187 pkgs, contracts auto-built by root postinstall) → `tsc --noEmit` **×3 packages, 0 errors** → vitest **8/8 guard tests** → `next build` **app** (6 static routes, 103 kB shared JS) + **api** (5 dynamic routes). Fixed en route: Drizzle self-ref FK cycles (`AnyPgColumn` thunks), accounts wire shape (sizes→strings + ISO dates mapped once in `listAccounts`, BigInt-JSON crash avoided), `outputFileTracingRoot` pinned to the monorepo root.
 - **`drivethrough-contracts`** — errors.ts (stable codes), uploads.ts (Zod upload protocol), domain.ts (FileMeta/Folder/Account/Share/ApiKey/etc.), accounts.ts (connect/list/sync contracts), index.ts barrel. package.json + tsconfig.
-- **`drivethrough-api`** — DB schema ported to Drizzle (`src/server/db/schema.ts`, 15 tables, exact indexes, ACID conventions), provider interface (`providers/types.ts`, tech.md §5), crypto vault (`crypto/vault.ts` AES-256-GCM + hashing), errors (`errors.ts`), CORS (`cors.ts`), Firebase auth guard (`auth/verify.ts` + `db-user.ts` firebase_uid→users upsert), placement engine (`storage/placement.ts`). package.json, tsconfig, `.env.example`.
+- **`drivethrough-api`** — DB schema ported to Drizzle (`src/server/db/schema.ts`, 14 tables, exact indexes, ACID conventions), provider interface (`providers/types.ts`, tech.md §5), crypto vault (`crypto/vault.ts` AES-256-GCM + hashing), errors (`errors.ts`), CORS (`cors.ts`), Firebase auth guard (`auth/verify.ts` + `db-user.ts` firebase_uid→users upsert), placement engine (`storage/placement.ts`). package.json, tsconfig, `.env.example`.
 - **`drivethrough-app`** — package.json (+ Tailwind 4), tsconfig, `postcss.config.mjs`, `globals.css` (design.md §5.3 tokens), `src/client/api.ts` (single network choke-point, async token getter), `src/client/accounts.ts` (connect flow), `src/client/firebase.ts` (client init, env-missing guard), `src/client/auth-context.tsx` (AuthProvider: Google popup w/ redirect fallback, email/password sign-in+up, token → api.ts, sign-out drops token), pages: `layout.tsx` (mounts AuthProvider), `(auth)/sign-in` (Google + email/password, mode toggle, mapped auth errors), `page.tsx` (auth gate → hub), `settings` (OAuth landing + account cards: quota bar, sync, disconnect — design.md §5.6), `.env.example`.
 - **Google OAuth connect flow (flow.md §3)** — `providers/google-oauth.ts` (consent URL, code exchange, refresh, root folder, quota — raw fetch), `accounts/connect-service.ts` (single-use state consume, token encrypt AAD-bound, account upsert, quota sync), routes: `GET /api/accounts`, `GET /api/accounts/google/start`, `GET /api/accounts/google/callback` (302 to frontend, no bearer), `POST /api/accounts/:id/sync-quota` (ownership checked first), `DELETE /api/accounts/:id` (soft disable). Frontend `connectGoogleAccount()` navigates the browser to Google.
 
@@ -27,6 +27,17 @@
 5. Spike S5 (cross-origin Firebase guard) — needs Firebase + both Vercel projects.
 6. Migrate schema to Neon (`db:generate` + `db:migrate`).
 7. Then P0.1 foundation (wiring services into route handlers).
+
+## Live on Vercel (2026-10-20)
+
+| Deployment | URL | State |
+|---|---|---|
+| **Backend** — Vercel project `drivethrough-kek7` (⚠️ owner's labels were swapped: this domain is the API) | `https://drivethrough-kek7.vercel.app` | ✅ full authed round-trip green: real Firebase ID token → keyless JWKS verify → Neon insert → `{"accounts":[]}` (HTTP 200) |
+| **Frontend** — Vercel project `drivethrough-navy` | `https://drivethrough-navy.vercel.app` | ✅ all pages 200; bundle rebuilt with prod API base |
+
+- **Neon: 14 tables applied** — `drizzle/0000_dark_grey_gargoyle.sql` (drizzle-kit 0.28.1 BigInt-serialization crash fixed via `sql\`0\`` defaults; schema↔DB parity verified).
+- **Prod lessons (hardened + guard-tested `tests/cors.test.ts`):** env URL values must be `https://` with **no trailing slash** (`cors.ts` + `api.ts` now normalize); `NEXT_PUBLIC_*` is build-time → env change requires **Redeploy**.
+- **Still on the owner:** frontend env `NEXT_PUBLIC_API_URL=https://drivethrough-kek7.vercel.app` (https, no slash) + Redeploy; `GOOGLE_CLIENT_ID/SECRET`; Firebase Authorised domain `drivethrough-navy.vercel.app`; delete smoke user `dt-smoke-20261020@example.com`.
 
 ## Decisions locked
 - **One monorepo + two Vercel projects (Root Directory) + shared contracts workspace**; bearer-only cross-origin auth; striping stays P1; free-tier-only (prd.md §11).

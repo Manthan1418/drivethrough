@@ -5,7 +5,11 @@
 
 import type { ApiError } from '@drivethrough/contracts';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+// Trailing slashes are stripped — pasting "https://api.example.com/" from a browser bar is
+// the single most common env mistake, and it would otherwise produce `…//api/…` 404s.
+// Scheme is NOT auto-rewritten: http://localhost:3001 must keep working in local dev even
+// though prod requires https (mixed content is blocked by the browser regardless of us).
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 
 let tokenGetter: () => string | null | Promise<string | null> = () => null;
 /** Injected once at app boot from the Firebase client SDK (sign-in lives in the frontend only).

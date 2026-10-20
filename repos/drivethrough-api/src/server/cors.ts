@@ -8,7 +8,13 @@ const EXPOSED_HEADERS = 'Content-Range, Content-Length, Accept-Ranges';
 
 function allowedOrigins(): string[] {
   const raw = process.env.CORS_ALLOW_ORIGIN ?? '';
-  return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  // Normalize: trim whitespace AND strip trailing slashes — browser Origin headers never
+  // carry a trailing slash, so an env value like "https://app.example.com/" (copy-pasted
+  // from the address bar) must still match. Caught live in prod 2026-10-20; guard test exists.
+  return raw
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
 }
 
 /** Returns CORS headers if the request origin is allowed; null if not allowed. */
