@@ -149,7 +149,9 @@ export async function syncAccountQuota(accountId: string): Promise<void> {
   }).where(eq(storageUsage.accountId, acct.id));
 }
 
-/** List a user's connected accounts + live usage (control plane). */
+/** List a user's connected accounts + live usage (control plane). Returns the wire shape from
+ *  contracts Account: nested usage, sizes as decimal STRINGS (bigint never reaches JSON.stringify),
+ *  timestamps ISO (AGENTS: sizes bigint in DB, strings in JSON). */
 export async function listAccounts(userId: string) {
   const db = getDb();
   const rows = await db
@@ -168,7 +170,20 @@ export async function listAccounts(userId: string) {
     .from(accounts)
     .leftJoin(storageUsage, eq(storageUsage.accountId, accounts.id))
     .where(eq(accounts.userId, userId));
-  return rows;
+  return rows.map((r) => ({
+    id: r.id,
+    provider: r.provider,
+    label: r.label,
+    status: r.status,
+    lastSyncedAt: r.lastSyncedAt ? r.lastSyncedAt.toISOString() : null,
+    lastError: r.lastError,
+    usage: {
+      totalBytes: r.totalBytes !== null ? r.totalBytes.toString() : null,
+      usedBytes: (r.usedBytes ?? 0n).toString(), // left-join miss ⇒ no storage_usage row yet
+      availableBytes: r.availableBytes !== null ? r.availableBytes.toString() : null,
+      reservedBytes: (r.reservedBytes ?? 0n).toString(),
+    },
+  }));
 }
 
 /** Disconnect: soft-remove (disable) rather than hard-delete — files on it stay until purged (G5/G8). */

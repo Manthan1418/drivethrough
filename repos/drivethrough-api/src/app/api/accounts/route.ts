@@ -13,22 +13,7 @@ export async function OPTIONS(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const { userId } = await requireDbUser(req);
-    const rows = await listAccounts(userId);
-    // sizes → strings (BigInt JSON safety, tech.md convention)
-    const accounts = rows.map((r) => ({
-      id: r.id,
-      provider: r.provider,
-      label: r.label,
-      status: r.status,
-      lastSyncedAt: r.lastSyncedAt?.toISOString() ?? null,
-      lastError: r.lastError,
-      usage: {
-        totalBytes: r.totalBytes?.toString() ?? null,
-        usedBytes: (r.usedBytes ?? 0n).toString(),
-        availableBytes: r.availableBytes?.toString() ?? null,
-        reservedBytes: (r.reservedBytes ?? 0n).toString(),
-      },
-    }));
+    const accounts = await listAccounts(userId); // already the contracts wire shape (sizes as strings, ISO dates)
     return withCors(req, NextResponse.json({ accounts }, { status: 200 }));
   } catch (err) {
     const { status, body } = toApiError(err);

@@ -2,7 +2,7 @@
 // Sizes are bigint. Enums mirror tech.md §3 status fields. Migrations generated via drizzle-kit.
 import {
   pgTable, pgEnum, uuid, varchar, text, bigint, integer, boolean,
-  timestamp, jsonb, uniqueIndex, index, primaryKey,
+  timestamp, jsonb, uniqueIndex, index, primaryKey, type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -70,7 +70,7 @@ export const storageUsage = pgTable('storage_usage', {
 export const folders = pgTable('folders', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  parentId: uuid('parent_id').references(() => folders.id), // null = root
+  parentId: uuid('parent_id').references((): AnyPgColumn => folders.id), // null = root; explicit AnyPgColumn breaks tsc's self-reference cycle
   name: varchar('name', { length: 512 }).notNull(),
   color: varchar('color', { length: 32 }),
   icon: varchar('icon', { length: 64 }),
@@ -98,7 +98,7 @@ export const files = pgTable('files', {
   // P1 striping
   stripeIndex: integer('stripe_index'),
   stripeCount: integer('stripe_count'),
-  parentFileId: uuid('parent_file_id').references(() => files.id),
+  parentFileId: uuid('parent_file_id').references((): AnyPgColumn => files.id), // self-ref: explicit AnyPgColumn breaks tsc's cycle
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: ts(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),

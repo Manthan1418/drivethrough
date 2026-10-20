@@ -12,7 +12,7 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const { userId } = await requireDbUser(req, { checkRevoked: true }); // sensitive op
+    const { userId } = await requireDbUser(req); // keyless verify: revocation bounded by the token's ≤1 h TTL (design.md §8)
     const { id } = await ctx.params;
     await disconnectAccount(userId, id);
     return withCors(req, NextResponse.json({ ok: true }, { status: 200 }));

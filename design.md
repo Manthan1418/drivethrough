@@ -271,7 +271,7 @@ Minimal: file name, size, mime, provider-agnostic preview (image inline / video 
 ## 7. Security design summary (detail in tech.md §8)
 
 Threat model focus: leaked links, stolen DB, stolen tokens, malicious uploads, SSRF via S3 endpoint, quota abuse via API keys.  
-Controls: Firebase ID-token verification (short TTL, revocation checks on sensitive ops); hashed bearer secrets; AES-GCM vault with AAD binding; read-only/expiring shares (revocation immediate by hash lookup); per-route rate limits; no credentialed URL ever returned across users; SSRF allowlist on endpoints; audit trail for every sensitive action; guard tests forbidding `role:'writer'` public permissions and full-body buffering.
+Controls: Firebase ID-token verification (short TTL ≤1 h — which doubles as the revocation bound, since keyless verify can't check revocation; see §8); hashed bearer secrets; AES-GCM vault with AAD binding; read-only/expiring shares (revocation immediate by hash lookup); per-route rate limits; no credentialed URL ever returned across users; SSRF allowlist on endpoints; audit trail for every sensitive action; guard tests forbidding `role:'writer'` public permissions and full-body buffering.
 
 ---
 
@@ -290,6 +290,7 @@ Controls: Firebase ID-token verification (short TTL, revocation checks on sensit
 | Dedup | P1 whole-file, P2 CDC | day-1 FastCDC | CDC needs chunk-level storage model; premature before striping exists |
 | DB | Postgres (Neon/Vercel) | MySQL (9Drive), SQLite/Turso | relational + jsonb + Prisma adapters + marketplace integration; Turso viable fallback |
 | Auth | **Firebase Auth** (owner's choice) | Better Auth, NextAuth (legacy), Clerk, roll-your-own | sign-in only — Google+email/password UX for free, no password/session code in our DB, free tier ample; cost: split identity store (Firebase = who, Postgres = what) + server-side ID-token verification. Better Auth = fallback if self-hosted identity becomes a requirement |
+| ID-token verification | **Keyless**: `jose` + Google's public JWKS (signature + iss/aud/exp/sub per Google's manual checklist); `firebase-admin` dropped 2026-10-20 | `firebase-admin` + service-account JSON (impossible here: org policy `iam.disableServiceAccountKeyCreation`, "secure by default" enforcement); workload-identity federation (overkill — JWT verification fundamentally needs no credential) | no secret to store/rotate, org-policy-proof, much lighter dependency (faster cold starts); **cost accepted: no `checkRevoked`** — sensitive ops (disconnect, purge, key create) are bounded by the token's ≤1 h TTL as revocation bound; revisit only if instant global sign-out becomes a requirement |
 
 ---
 

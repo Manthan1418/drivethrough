@@ -70,7 +70,7 @@ sequenceDiagram
     B->>F: signInWithPopup(Google) or email/password
     F-->>B: ID token (≈1 h, SDK auto-refreshes)
     B->>A: API call + Authorization: Bearer <ID token>
-    A->>A: verify ID token (firebase-admin, cached keys)
+    A->>A: verify ID token (keyless: jose + Google public JWKS)
     A->>P: upsert users row keyed by firebase_uid (first call only)
     A-->>B: data (Bearer-only — cross-origin, no session cookie)
     Note over A: no password table, no session table —<br/>Firebase owns credentials; we trust only verified tokens

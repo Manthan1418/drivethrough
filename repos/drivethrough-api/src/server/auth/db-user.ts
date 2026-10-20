@@ -11,11 +11,8 @@ export interface DbUser extends AuthedUser {
 }
 
 /** Verify the ID token, then get-or-create the users row. Returns both identities. */
-export async function requireDbUser(
-  req: Request,
-  opts: { checkRevoked?: boolean } = {}
-): Promise<DbUser> {
-  const authed = await requireAuth(req, opts);
+export async function requireDbUser(req: Request): Promise<DbUser> {
+  const authed = await requireAuth(req);
   const db = getDb();
 
   const [existing] = await db
