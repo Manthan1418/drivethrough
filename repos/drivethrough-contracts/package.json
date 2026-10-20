@@ -1,0 +1,26 @@
+{
+  "name": "@drivethrough/contracts",
+  "version": "0.0.1",
+  "description": "Shared API wire contracts (Zod schemas + inferred types + error codes) for DriveThrough. Public, no secrets. Consumed by drivethrough-api and drivethrough-app as a git dependency.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

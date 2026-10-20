@@ -1,0 +1,16 @@
+{
+  "name": "drivethrough",
+  "version": "0.0.1",
+  "private": true,
+  "description": "DriveThrough monorepo — spec docs + three packages. Deploy = TWO Vercel projects with Root Directory repos/drivethrough-app and repos/drivethrough-api (owner decision 2026-10-20, superseding the separate-repos plan).",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "repos/*"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace=@drivethrough/contracts",
+    "dev:app": "npm run dev --workspace=drivethrough-app",
+    "dev:api": "npm run dev --workspace=drivethrough-api -- --port 3001",
+    "typecheck": "npm run typecheck --workspaces"
+  }
+}

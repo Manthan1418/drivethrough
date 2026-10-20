@@ -1,0 +1,52 @@
+// Stable error codes — cross-repo truth. Backend emits these; frontend maps them to UX.
+// Source: flow.md §9, design.md §6. NEVER rename a code once shipped (clients match on it).
+
+export const ErrorCodes = {
+  // auth
+  UNAUTHENTICATED: 'UNAUTHENTICATED',
+  TOKEN_REVOKED: 'TOKEN_REVOKED',
+  FORBIDDEN: 'FORBIDDEN',
+  RATE_LIMITED: 'RATE_LIMITED',
+
+  // accounts / placement
+  ACCOUNT_NEEDS_REAUTH: 'ACCOUNT_NEEDS_REAUTH',
+  NO_ACCOUNT_WITH_ENOUGH_SPACE: 'NO_ACCOUNT_WITH_ENOUGH_SPACE',
+  NO_CONNECTED_ACCOUNT: 'NO_CONNECTED_ACCOUNT',
+
+  // uploads
+  UPLOAD_NOT_FOUND: 'UPLOAD_NOT_FOUND',
+  UPLOAD_SIZE_MISMATCH: 'UPLOAD_SIZE_MISMATCH',
+  CHUNK_OUT_OF_ORDER: 'CHUNK_OUT_OF_ORDER',
+  CHUNK_RANGE_INVALID: 'CHUNK_RANGE_INVALID',
+  UPLOAD_ALREADY_COMPLETED: 'UPLOAD_ALREADY_COMPLETED',
+  FILE_TOO_LARGE_FOR_PLAN: 'FILE_TOO_LARGE_FOR_PLAN',
+
+  // files / folders
+  FILE_NOT_FOUND: 'FILE_NOT_FOUND',
+  FOLDER_NOT_FOUND: 'FOLDER_NOT_FOUND',
+  FOLDER_CYCLE: 'FOLDER_CYCLE',
+  NAME_ALREADY_EXISTS: 'NAME_ALREADY_EXISTS',
+
+  // shares / keys
+  SHARE_NOT_FOUND: 'SHARE_NOT_FOUND',
+  SHARE_EXPIRED: 'SHARE_EXPIRED',
+  KEY_NOT_FOUND: 'KEY_NOT_FOUND',
+
+  // provider
+  PROVIDER_ERROR: 'PROVIDER_ERROR',
+  PROVIDER_RATE_LIMITED: 'PROVIDER_RATE_LIMITED',
+  UPSTREAM_UNAVAILABLE: 'UPSTREAM_UNAVAILABLE',
+
+  // misc
+  VALIDATION_FAILED: 'VALIDATION_FAILED',
+  NOT_IMPLEMENTED: 'NOT_IMPLEMENTED',
+  INTERNAL_ERROR: 'INTERNAL_ERROR',
+} as const;
+
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+/** Every error response body — stable shape (9Drive convention kept). */
+export interface ApiError {
+  code: ErrorCode | string;
+  message: string;
+}

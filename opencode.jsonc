@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // DriveThrough — project configuration.
+  // Spec docs (prd.md, flow.md, tech.md, design.md) load as instructions alongside AGENTS.md.
+  // Project skills live in .opencode/skills/ (vercel-limits, storage-gateway, resumable-upload, google-drive-api).
+  "instructions": ["prd.md", "flow.md", "tech.md", "design.md"],
+  "permissions": [
+    { "action": "skill", "resource": "*", "effect": "allow" },
+    // Phase gate: no scaffolding/build commands until the four docs are approved.
+    // Building starts with tech.md §12 P0.0 spikes only after explicit user sign-off.
+    { "action": "shell", "resource": "npm install *", "effect": "ask" },
+    { "action": "shell", "resource": "npx create-next-app *", "effect": "deny" },
+    { "action": "shell", "resource": "git init *", "effect": "ask" }
+  ]
+}

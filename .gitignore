@@ -1,0 +1,10 @@
+# monorepo root — npm workspaces hoists node_modules HERE (each package's own
+# .gitignore only covers its anchored /node_modules, so this must catch the root one)
+node_modules/
+
+# local agent state — may contain session transcripts (pasted secrets!); never commit
+.opencode/
+
+# OS / logs
+.DS_Store
+*.log

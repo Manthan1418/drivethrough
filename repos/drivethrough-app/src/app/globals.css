@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+
+/* Design tokens — design.md §5.3. Dark default + light via system; single indigo accent. */
+@theme {
+  --radius-surface: 10px;   /* surfaces */
+  --radius-control: 8px;    /* buttons/inputs */
+
+  --color-accent: #6366f1;      /* indigo-500 — single accent */
+  --color-accent-hover: #4f46e5;
+  --color-free: #22c55e;        /* semantic: free space */
+  --color-reserved: #f59e0b;    /* semantic: reserved */
+  --color-error: #ef4444;       /* semantic: error */
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+  --ease-micro: 150ms ease-out;  /* motion: 120–180 ms ease-out */
+}
+
+/* dark default; light when system asks for it */
+:root {
+  color-scheme: light dark;
+}
+
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* tabular numbers for sizes/quota everywhere */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
