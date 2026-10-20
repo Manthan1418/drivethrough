@@ -29,6 +29,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   [ErrorCodes.UPSTREAM_UNAVAILABLE]: 503,
   [ErrorCodes.VALIDATION_FAILED]: 400,
   [ErrorCodes.NOT_IMPLEMENTED]: 501,
+  [ErrorCodes.SERVICE_NOT_CONFIGURED]: 503,
   [ErrorCodes.INTERNAL_ERROR]: 500,
 };
 
@@ -37,12 +38,15 @@ export class AppError extends Error {
   readonly status: number;
   readonly expose: boolean;
 
-  constructor(code: ErrorCode | string, message?: string, status?: number) {
+  constructor(code: ErrorCode | string, message?: string, status?: number, expose?: boolean) {
     super(message ?? code);
     this.name = 'AppError';
     this.code = code;
     this.status = status ?? STATUS_BY_CODE[code] ?? 500;
-    this.expose = this.status < 500; // never leak internal details on 5xx
+    // never leak internal details on 5xx — unless explicitly marked safe-to-show
+    // (SERVICE_NOT_CONFIGURED: a 503 whose whole point is telling the admin which
+    // config is missing; contains no secrets — design.md §6)
+    this.expose = expose ?? this.status < 500;
   }
 
   toResponse(): { status: number; body: ApiError } {

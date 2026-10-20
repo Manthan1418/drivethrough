@@ -265,6 +265,7 @@ Minimal: file name, size, mime, provider-agnostic preview (image inline / video 
 | `FILE_TOO_LARGE_FOR_PLAN` | explain + options (split / upgrade / direct link) |
 | `UPSTREAM_QUOTA_EXCEEDED` (Google 750 GB/day) | "Account at daily upload limit — retry in X h" with per-account attribution |
 | `UNAUTHENTICATED` | soft redirect preserving return URL |
+| `SERVICE_NOT_CONFIGURED` | settings inline notice — "Google Drive connect isn't configured on this server yet (missing …)". A 503 with an honest message, **never a raw 500**; the connect button then waits for admin setup instead of crashing |
 
 ---
 

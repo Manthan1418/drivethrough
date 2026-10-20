@@ -14,19 +14,31 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 
+// Missing OAuth env is a SERVER SETUP gap, not an internal error: surface the stable
+// SERVICE_NOT_CONFIGURED (503, message exposed) so the UI can say exactly what's missing
+// instead of a raw 500 (design.md §6; caught live 2026-10-20). Values come from the GCP
+// OAuth client → .env (local) / Vercel env (prod). No secrets in the message — var names only.
+function notConfigured(varName: string): AppError {
+  return new AppError(
+    ErrorCodes.SERVICE_NOT_CONFIGURED,
+    `Google Drive connect isn't configured on this server yet (missing ${varName} — GCP OAuth client not set up)`,
+    503,
+    true
+  );
+}
 function clientId(): string {
   const id = process.env.GOOGLE_CLIENT_ID;
-  if (!id) throw new Error('GOOGLE_CLIENT_ID not set');
+  if (!id) throw notConfigured('GOOGLE_CLIENT_ID');
   return id;
 }
 function clientSecret(): string {
   const s = process.env.GOOGLE_CLIENT_SECRET;
-  if (!s) throw new Error('GOOGLE_CLIENT_SECRET not set');
+  if (!s) throw notConfigured('GOOGLE_CLIENT_SECRET');
   return s;
 }
 function redirectUri(): string {
   const u = process.env.GOOGLE_REDIRECT_URI;
-  if (!u) throw new Error('GOOGLE_REDIRECT_URI not set');
+  if (!u) throw notConfigured('GOOGLE_REDIRECT_URI');
   return u;
 }
 
