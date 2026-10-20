@@ -12,14 +12,14 @@
 ## Blocked on owner account setup (needs you)
 | Item | Blocks | What I need from you |
 |---|---|---|
-| Vercel account + 2 projects | S1, S2 deploys, everything | Create `drivethrough-api` + `drivethrough-app` projects; connect GitHub repos once pushed |
+| Vercel account + 2 projects | S1, S2 deploys, everything | Create `drivethrough-api` + `drivethrough-app` projects **from the pushed `drivethrough` repo**; Root Directory = `repos/drivethrough-api` / `repos/drivethrough-app`; function region `sin1` |
 | Google Cloud project (Drive API + OAuth consent Testing) | S1 (Drive proxy test), connect-a-account flow | Enable Drive API; create OAuth client; add yourself as test user; share client ID/secret |
 | Firebase project (Google + email/password) | ~~S5 / sign-in~~ **code is done** — sign-in UI, auth context, token bridge, backend guard all written | Create project → enable **Google** + **Email/Password** providers → add **Web app** → paste 4 `NEXT_PUBLIC_FIREBASE_*` into app `.env.local` → Service accounts → JSON into api `.env.local`; add your site origin to **Authorized JavaScript origins** (popup) |
 | Neon (Postgres) | nothing — ✅ **string provided 2026-10-20** (in api `.env`, TLS-verified reachable; mirror to Vercel envs at deploy, function region `sin1` to match `ap-southeast-1`) | Step 6: `db:generate` + `db:migrate` (drizzle.config.ts now exists), then S4 burst test |
 
 ## Next up (in order, per tech.md §12)
 1. Owner completes account setup (table above) → fills `.env.local` files.
-2. ~~`git init` + push each repo~~ → **monorepo instead** (owner decision 2026-10-20): `git init` at the root, one push to `github.com/Manthan1418/drivethrough`; `<ORG>` git-deps removed (npm workspaces `"*"` + root `postinstall` builds contracts). Local commit done; **push waits on the owner registering an SSH public key with GitHub (one paste).**
+2. ✅ **Pushed 2026-10-20** — monorepo instead of three repos (owner decision): root commit `88ec0be` → `github.com/Manthan1418/drivethrough` (branch `main`, SSH auth). `<ORG>` git-deps removed (npm workspaces `"*"` + root `postinstall` builds contracts). Next: `npm install` at root (approval-gated), typecheck/build gate, then spikes.
 3. Spike S2 (chunk streaming under Vercel) — self-contained, needs only Vercel.
 4. Spike S1 variant A (Vercel Drive proxy) + variant B (free Worker relay) — needs Google + Vercel.
 5. Spike S5 (cross-origin Firebase guard) — needs Firebase + both Vercel projects.
