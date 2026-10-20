@@ -37,7 +37,8 @@
 
 - **Neon: 14 tables applied** — `drizzle/0000_dark_grey_gargoyle.sql` (drizzle-kit 0.28.1 BigInt-serialization crash fixed via `sql\`0\`` defaults; schema↔DB parity verified).
 - **Prod lessons (hardened + guard-tested `tests/cors.test.ts`):** env URL values must be `https://` with **no trailing slash** (`cors.ts` + `api.ts` now normalize); `NEXT_PUBLIC_*` is build-time → env change requires **Redeploy**.
-- **Still on the owner:** frontend env `NEXT_PUBLIC_API_URL=https://drivethrough-kek7.vercel.app` (https, no slash) + Redeploy; `GOOGLE_CLIENT_ID/SECRET`; Firebase Authorised domain `drivethrough-navy.vercel.app`; delete smoke user `dt-smoke-20261020@example.com`.
+- **✅ FINAL PROD STATE (2026-10-20, re-verified after owner's env fix):** frontend bundle bakes `https://drivethrough-kek7.vercel.app` (0 localhost leftovers); preflight real origin 204 + ACAO; localhost/evil origins 403; error paths carry ACAO; authed round-trip 200 `{"accounts":[]}`; garbage token 401. **System end-to-end green.**
+- **Still on the owner (console-only, no code):** GCP OAuth client → `GOOGLE_CLIENT_ID/SECRET`; Firebase Authorised domain `drivethrough-navy.vercel.app` (needed for Google **popup** sign-in from prod); delete smoke user `dt-smoke-20261020@example.com`.
 
 ## Decisions locked
 - **One monorepo + two Vercel projects (Root Directory) + shared contracts workspace**; bearer-only cross-origin auth; striping stays P1; free-tier-only (prd.md §11).
