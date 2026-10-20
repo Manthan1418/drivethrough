@@ -8,23 +8,26 @@ import { getDb } from '../db/client';
 import { accounts, storageUsage, oauthStates, users } from '../db/schema';
 import { hashToken, generateToken, encryptSecret, decryptSecret } from '../crypto/vault';
 import {
-  buildConsentUrl, exchangeCode, ensureRootFolder, fetchQuota, refreshAccessToken,
+  buildConsentUrl, exchangeCode, ensureRootFolder, fetchAbout, generatePkce, refreshAccessToken,
 } from '../providers/google-oauth';
 
 const STATE_TTL_MS = 10 * 60 * 1000; // flow.md §3: 10 min TTL
 
-/** Start a Drive connect flow: mint single-use state (bound to user), return Google consent URL. */
+/** Start a Drive connect flow: mint single-use state (bound to user, PKCE verifier kept
+ *  server-side), return Google's consent URL (S256 challenge in the URL). */
 export async function startGoogleConnect(userId: string): Promise<{ authUrl: string }> {
   const raw = generateToken(32);
+  const pkce = generatePkce();
   const db = getDb();
   await db.insert(oauthStates).values({
     userId,
     provider: 'google_drive',
     stateHash: hashToken(raw),
     flow: 'connect',
+    codeVerifier: pkce.verifier,
     expiresAt: new Date(Date.now() + STATE_TTL_MS),
   });
-  return { authUrl: buildConsentUrl(raw) };
+  return { authUrl: buildConsentUrl(raw, pkce.challenge) };
 }
 
 /**
@@ -44,29 +47,38 @@ export async function handleGoogleCallback(code: string, state: string): Promise
       eq(oauthStates.flow, 'connect'),
       isNull(oauthStates.usedAt),
     ))
-    .returning({ userId: oauthStates.userId, expiresAt: oauthStates.expiresAt });
+    .returning({
+      userId: oauthStates.userId,
+      expiresAt: oauthStates.expiresAt,
+      codeVerifier: oauthStates.codeVerifier,
+    });
 
   const row = consumed[0];
   if (!row) throw new AppError(ErrorCodes.VALIDATION_FAILED, 'Invalid or already-used state');
   if (row.expiresAt.getTime() < Date.now()) throw new AppError(ErrorCodes.VALIDATION_FAILED, 'State expired');
+  if (!row.codeVerifier) throw new AppError(ErrorCodes.VALIDATION_FAILED, 'State missing PKCE verifier');
 
-  // exchange code → tokens (throws PROVIDER_ERROR if Google rejects)
-  const tokens = await exchangeCode(code);
+  // exchange code → tokens (throws PROVIDER_ERROR if Google rejects); the PKCE verifier
+  // proves the code belongs to this exact flow (code-interception guard)
+  const tokens = await exchangeCode(code, row.codeVerifier);
 
-  // idempotent-ish: same Google account reconnected → update tokens instead of duplicate row
-  const profileEmail = await fetchProfileEmail(tokens.accessToken);
+  // ONE about.get call = quota + authorizing user. Identity is Google's stable
+  // permissionId — never email (email can change; the old email-keying could even merge
+  // two different accounts on the 'drive-account' fallback). 9Drive keys the same way.
+  const about = await fetchAbout(tokens.accessToken);
+  const providerAccountId = about.permissionId ?? about.email ?? 'unknown';
+  const label = about.email ?? providerAccountId;
   const existing = await db
     .select()
     .from(accounts)
     .where(and(
       eq(accounts.userId, row.userId),
       eq(accounts.provider, 'google_drive'),
-      eq(accounts.label, profileEmail),
+      eq(accounts.providerAccountId, providerAccountId),
     ))
     .limit(1);
 
   const rootFolderId = await ensureRootFolder(tokens.accessToken);
-  const quota = await fetchQuota(tokens.accessToken);
   const now = new Date();
   // AAD binds ciphertext to the account row (tech.md §8) — encrypt after we know the id for new rows,
   // for updates we reuse the existing row id.
@@ -75,6 +87,8 @@ export async function handleGoogleCallback(code: string, state: string): Promise
   if (existing[0]) {
     accountId = existing[0].id;
     await db.update(accounts).set({
+      label, // display follows email changes; identity stays the permissionId
+      providerAccountId,
       accessTokenEnc: encryptSecret(tokens.accessToken, accountId),
       refreshTokenEnc: tokens.refreshToken ? encryptSecret(tokens.refreshToken, accountId) : existing[0].refreshTokenEnc,
       tokenExpiresAt: new Date(tokens.expiresAt),
@@ -84,7 +98,7 @@ export async function handleGoogleCallback(code: string, state: string): Promise
       lastSyncedAt: now,
     }).where(eq(accounts.id, accountId));
     await db.update(storageUsage).set({
-      totalBytes: quota.total, usedBytes: quota.used, availableBytes: quota.available, syncedAt: now,
+      totalBytes: about.total, usedBytes: about.used, availableBytes: about.available, syncedAt: now,
     }).where(eq(storageUsage.accountId, accountId));
   } else {
     const inserted = await db
@@ -92,7 +106,8 @@ export async function handleGoogleCallback(code: string, state: string): Promise
       .values({
         userId: row.userId,
         provider: 'google_drive',
-        label: profileEmail,
+        label,
+        providerAccountId,
         status: 'connected',
         rootFolderId,
         tokenExpiresAt: new Date(tokens.expiresAt),
@@ -108,9 +123,9 @@ export async function handleGoogleCallback(code: string, state: string): Promise
     }).where(eq(accounts.id, accountId));
     await db.insert(storageUsage).values({
       accountId,
-      totalBytes: quota.total,
-      usedBytes: quota.used,
-      availableBytes: quota.available,
+      totalBytes: about.total,
+      usedBytes: about.used,
+      availableBytes: about.available,
       syncedAt: now,
     });
   }
@@ -135,7 +150,7 @@ export async function syncAccountQuota(accountId: string): Promise<void> {
   }
   const refresh = decryptForAccount(acct.refreshTokenEnc, acct.id);
   const tokens = await refreshAccessToken(refresh); // throws ACCOUNT_NEEDS_REAUTH on revoke (G8)
-  const quota = await fetchQuota(tokens.accessToken);
+  const about = await fetchAbout(tokens.accessToken);
   const now = new Date();
   await db.update(accounts).set({
     accessTokenEnc: encryptSecret(tokens.accessToken, acct.id),
@@ -145,7 +160,7 @@ export async function syncAccountQuota(accountId: string): Promise<void> {
     lastSyncedAt: now,
   }).where(eq(accounts.id, acct.id));
   await db.update(storageUsage).set({
-    totalBytes: quota.total, usedBytes: quota.used, availableBytes: quota.available, syncedAt: now,
+    totalBytes: about.total, usedBytes: about.used, availableBytes: about.available, syncedAt: now,
   }).where(eq(storageUsage.accountId, acct.id));
 }
 
@@ -198,19 +213,6 @@ export async function disconnectAccount(userId: string, accountId: string): Prom
 }
 
 // ---- helpers ----
-
-async function fetchProfileEmail(accessToken: string): Promise<string> {
-  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  if (res.ok) {
-    const info = (await res.json()) as { email?: string };
-    if (info.email) return info.email;
-  }
-  // fallback: userinfo may be unavailable if scope lacks profile — use token sub via id_token not available here;
-  // fall back to a stable label from root folder fetch is overkill; use drive about user? Keep simple:
-  return 'drive-account';
-}
 
 async function ensureUserRow(userId: string): Promise<void> {
   const db = getDb();

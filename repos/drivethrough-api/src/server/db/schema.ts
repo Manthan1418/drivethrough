@@ -52,6 +52,9 @@ export const accounts = pgTable('accounts', {
   createdAt: ts(),
 }, (t) => [
   uniqueIndex('accounts_user_provider_label').on(t.userId, t.provider, t.label),
+  // account identity = Google's stable permissionId (flow.md §3); email is display-only.
+  // Postgres unique indexes allow multiple NULLs, so S3 rows (no pid yet) are unaffected.
+  uniqueIndex('accounts_user_provider_pid').on(t.userId, t.provider, t.providerAccountId),
   index('accounts_user_status').on(t.userId, t.status),
 ]);
 
@@ -204,6 +207,10 @@ export const oauthStates = pgTable('oauth_states', {
   provider: providerKind('provider').notNull(),
   stateHash: varchar('state_hash', { length: 64 }).notNull().unique(),
   flow: varchar('flow', { length: 64 }).notNull(),
+  // PKCE (RFC 7636 S256): the code_verifier for this connect attempt, needed verbatim at the
+  // token exchange. Plaintext is deliberate — useless without the auth code + client secret,
+  // and this row is single-use with a 10-minute TTL.
+  codeVerifier: text('code_verifier'),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   usedAt: timestamp('used_at', { withTimezone: true }),
   createdAt: ts(),

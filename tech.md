@@ -90,7 +90,8 @@ Port of 9Drive's Prisma schema with serverless corrections. Core tables (columns
 users                 id, firebase_uid UNIQUE, email, name, avatar_url, created_at
                       (identity lives in Firebase Auth — no password/session tables here)
 accounts              id, user_id, provider[google_drive|s3], email/label, status[connected|needs_reauth|disabled],
-                      provider_account_id, root_folder_id,
+                      provider_account_id (identity key = Google permissionId; email is display-only),
+                      unique(user_id, provider, provider_account_id), root_folder_id,
                       access_token_enc? refresh_token_enc? token_expires_at   -- AES-GCM at rest
                       s3_endpoint/region/bucket/access_key_enc/secret_key_enc/prefix/quota_bytes (nullable)
                       last_error, last_synced_at
@@ -109,7 +110,7 @@ reservations          id, upload_id?, user_id, account_id, bytes, expires_at    
 shares                id, file_id, user_id, token_hash, enabled, expires_at?, role[viewer], created_at
 preview_tokens        id, file_id, token_hash, expires_at
 api_keys              id, user_id, name, key_prefix, key_hash, scopes jsonb, last_used_at, revoked_at
-oauth_states          id, provider, state_hash, flow, expires_at, used_at
+oauth_states          id, provider, state_hash, code_verifier(PKCE S256), flow, expires_at, used_at
 invites               id, inviter_id, email, target_type, target_id, role, status
 audit_logs            id, user_id?, action, entity_type, entity_id, metadata jsonb, created_at
 ```

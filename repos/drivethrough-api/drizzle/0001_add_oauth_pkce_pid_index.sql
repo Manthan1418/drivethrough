@@ -1,0 +1,2 @@
+ALTER TABLE "oauth_states" ADD COLUMN "code_verifier" text;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_user_provider_pid" ON "accounts" USING btree ("user_id","provider","provider_account_id");

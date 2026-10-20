@@ -92,17 +92,17 @@ sequenceDiagram
     participant G as Google Drive
 
     B->>A: GET /api/accounts/google/start
-    A->>P: create oauth_state (hash, 10 min TTL, flow=connect)
-    A-->>B: Google consent URL
-    B->>G: user approves
+    A->>P: create oauth_state (state hash, PKCE verifier, 10 min TTL, flow=connect)
+    A-->>B: Google consent URL (S256 challenge)
+    B->>G: user picks account + approves (Google's own page — we never see credentials)
     G-->>B: redirect /api/accounts/google/callback?code&state
-    B->>A: callback
-    A->>P: verify+consume state (single-use)
-    A->>G: exchange code (access + refresh token)
-    A->>A: encrypt tokens
-    A->>P: insert ConnectedAccount + StorageAccount (quota unknown yet)
-    A->>G: files.get about (quota) / start upload to app root folder "drivethrough"
-    A->>P: update quota, lastSyncedAt=now
+    B->>A: callback (no bearer — the state row IS the credential)
+    A->>P: verify + consume state (atomic single-use)
+    A->>G: exchange code (+ code_verifier) → access + refresh token
+    A->>A: encrypt tokens (AAD = account id)
+    A->>G: about.get storageQuota,user (quota + stable permissionId + email, one call)
+    A->>G: ensure app root folder "drivethrough"
+    A->>P: insert/update account keyed on permissionId (email = display label only)
     A-->>B: redirect /settings?connected=1
 ```
 

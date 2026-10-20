@@ -2,6 +2,7 @@
 // Covers the connect-a-account flow (flow.md §3): consent URL, code exchange, root folder, quota.
 // No `any` in this path (AGENTS.md).
 
+import { createHash, randomBytes } from 'node:crypto';
 import { ErrorCodes } from '@drivethrough/contracts';
 import { AppError } from '../errors';
 
@@ -42,8 +43,24 @@ function redirectUri(): string {
   return u;
 }
 
+// ---- PKCE (RFC 7636, S256) — Google supports it for web clients at no setup cost ----
+// The verifier stays in the single-use oauth_states row; only the challenge goes to Google.
+// Binds the authorization code to THIS flow (code-interception defense-in-depth). 9Drive
+// parity minus this hardening — theirs is a plain state token.
+
+export interface PkcePair {
+  verifier: string; // secret half — sent back verbatim at the token exchange
+  challenge: string; // public half — goes in the consent URL
+}
+
+export function generatePkce(): PkcePair {
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
+}
+
 /** Build the Google consent URL. `state` is the single-use CSRF token (hashed in DB by caller). */
-export function buildConsentUrl(state: string): string {
+export function buildConsentUrl(state: string, codeChallenge: string): string {
   const p = new URLSearchParams({
     client_id: clientId(),
     redirect_uri: redirectUri(),
@@ -52,6 +69,8 @@ export function buildConsentUrl(state: string): string {
     access_type: 'offline', // get a refresh_token
     prompt: 'consent', // force consent screen so we always receive a refresh token
     state,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   return `${AUTH_URL}?${p.toString()}`;
 }
@@ -63,18 +82,25 @@ export interface TokenSet {
   scope?: string;
 }
 
+/** Pure builder (unit-testable, no network): authorization-code token request incl. PKCE verifier. */
+export function tokenRequestBody(code: string, codeVerifier?: string): URLSearchParams {
+  const body = new URLSearchParams({
+    code,
+    client_id: clientId(),
+    client_secret: clientSecret(),
+    redirect_uri: redirectUri(),
+    grant_type: 'authorization_code',
+  });
+  if (codeVerifier) body.set('code_verifier', codeVerifier); // PKCE: proof of the S256 challenge
+  return body;
+}
+
 /** Exchange an authorization code for access + refresh tokens. */
-export async function exchangeCode(code: string): Promise<TokenSet> {
+export async function exchangeCode(code: string, codeVerifier: string): Promise<TokenSet> {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: clientId(),
-      client_secret: clientSecret(),
-      redirect_uri: redirectUri(),
-      grant_type: 'authorization_code',
-    }),
+    body: tokenRequestBody(code, codeVerifier),
   });
   if (!res.ok) {
     throw new AppError(ErrorCodes.PROVIDER_ERROR, `Token exchange failed (${res.status})`);
@@ -160,19 +186,36 @@ export async function ensureRootFolder(accessToken: string): Promise<string> {
   return id;
 }
 
-/** Fetch account storage quota (about?fields=storageQuota). total=null when unlimited (Workspace). */
-export async function fetchQuota(accessToken: string): Promise<{
+/**
+ * about.get with storageQuota + user: quota AND the authorizing user's identity in ONE call.
+ * `permissionId` is Google's stable per-user id — the account identity key (9Drive keys on
+ * their equivalent; email is display-only and can change). total=null when unlimited (Workspace).
+ */
+export interface DriveAbout {
   total: bigint | null;
   used: bigint;
   available: bigint | null;
-}> {
-  const res = await driveFetch(accessToken, '/about?fields=storageQuota');
+  permissionId: string | null;
+  email: string | null;
+  displayName: string | null;
+}
+
+export async function fetchAbout(accessToken: string): Promise<DriveAbout> {
+  const res = await driveFetch(accessToken, '/about?fields=storageQuota,user');
   if (!res.ok) throw new AppError(ErrorCodes.PROVIDER_ERROR, `Quota fetch failed (${res.status})`);
-  const { storageQuota } = (await res.json()) as {
+  const { storageQuota, user } = (await res.json()) as {
     storageQuota?: { usage?: string; limit?: string };
+    user?: { permissionId?: string; emailAddress?: string; displayName?: string };
   };
   const used = BigInt(storageQuota?.usage ?? '0');
   const limit = storageQuota?.limit;
   const total = limit !== undefined ? BigInt(limit) : null;
-  return { total, used, available: total !== null ? total - used : null };
+  return {
+    total,
+    used,
+    available: total !== null ? total - used : null,
+    permissionId: user?.permissionId ?? null,
+    email: user?.emailAddress ?? null,
+    displayName: user?.displayName ?? null,
+  };
 }
