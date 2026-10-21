@@ -108,6 +108,8 @@ sequenceDiagram
 
 S3 accounts skip OAuth: the browser posts endpoint/region/bucket/keys/prefix; server validates with a test `HeadBucket`/`ListObjects` call, encrypts keys, inserts rows.
 
+**Config source:** the flow resolves the app's Google OAuth client credentials from `provider_configs` — the Settings form (9Drive parity, adopted 2026-10-21 after owner review) — with the `GOOGLE_*` env vars as a local-dev fallback; missing everywhere ⇒ the honest 503 `SERVICE_NOT_CONFIGURED`.
+
 **App root folder:** per connected account the server ensures a single root folder (named `drivethrough`) and stores its provider ID — all physical objects live beneath it; the virtual namespace is independent (9Drive's model, kept).
 
 ---
@@ -266,9 +268,10 @@ Mirrors 9Drive's proven surface, namespaced under `/api`:
 
 ```
 Auth        Firebase SDK on client (Google + email/password) · every API call carries Authorization: Bearer <ID token> (no session endpoint — cross-origin bearer)
-Accounts    GET /api/accounts · GET /api/accounts/google/start → { authUrl } (frontend navigates there; until the GCP OAuth env exists this returns 503 SERVICE_NOT_CONFIGURED with an honest message — never a raw 500, design.md §6)
+Accounts    GET /api/accounts · GET /api/accounts/google/start → { authUrl } (frontend navigates there; until Google creds exist — Settings form or env — this returns 503 SERVICE_NOT_CONFIGURED with an honest message — never a raw 500, design.md §6)
             GET  /api/accounts/google/callback?code&state (Google redirect → 302 to frontend; no bearer — single-use state is the credential)
             POST /api/accounts/:id/sync-quota · DELETE /api/accounts/:id
+System      GET/POST /api/system/google-config (9Drive parity: the app's Google OAuth client credentials entered in Settings, stored encrypted; secret WRITE-ONLY — only a hasSecret flag leaves the server)
 Storage     GET /api/storage/summary · GET /api/storage/breakdown
 Folders     GET/POST /api/folders · PATCH/DELETE /api/folders/:id
 Files       GET /api/files · GET/PATCH/DELETE /api/files/:id · POST /api/files/batch

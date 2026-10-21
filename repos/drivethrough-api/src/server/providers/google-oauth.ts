@@ -15,10 +15,19 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 
-// Missing OAuth env is a SERVER SETUP gap, not an internal error: surface the stable
+// Missing OAuth config is a SERVER SETUP gap, not an internal error: surface the stable
 // SERVICE_NOT_CONFIGURED (503, message exposed) so the UI can say exactly what's missing
-// instead of a raw 500 (design.md §6; caught live 2026-10-20). Values come from the GCP
-// OAuth client → .env (local) / Vercel env (prod). No secrets in the message — var names only.
+// instead of a raw 500 (design.md §6; caught live 2026-10-20). Config comes from the
+// in-app Settings form (provider_configs, 9Drive parity) with the GOOGLE_* env vars as a
+// local-dev fallback. No secrets in messages — var names only.
+
+/** Public shape of the app's Google OAuth client credentials. */
+export interface OAuthConfig {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}
+
 function notConfigured(varName: string): AppError {
   return new AppError(
     ErrorCodes.SERVICE_NOT_CONFIGURED,
@@ -27,20 +36,32 @@ function notConfigured(varName: string): AppError {
     true
   );
 }
-function clientId(): string {
-  const id = process.env.GOOGLE_CLIENT_ID;
-  if (!id) throw notConfigured('GOOGLE_CLIENT_ID');
-  return id;
+
+/** The stable "nowhere to get credentials from" error — points at the in-app form first. */
+export function googleNotConfigured(): AppError {
+  return new AppError(
+    ErrorCodes.SERVICE_NOT_CONFIGURED,
+    "Google Drive connect isn't configured on this server yet — save your Google API credentials in Settings (or set GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET/GOOGLE_REDIRECT_URI env for local dev)",
+    503,
+    true
+  );
 }
-function clientSecret(): string {
-  const s = process.env.GOOGLE_CLIENT_SECRET;
-  if (!s) throw notConfigured('GOOGLE_CLIENT_SECRET');
-  return s;
+
+/** Env fallback: null unless ALL THREE vars exist (incomplete env must not half-work). */
+export function envGoogleConfig(): OAuthConfig | null {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+  if (!clientId || !clientSecret || !redirectUri) return null;
+  return { clientId, clientSecret, redirectUri };
 }
-function redirectUri(): string {
-  const u = process.env.GOOGLE_REDIRECT_URI;
-  if (!u) throw notConfigured('GOOGLE_REDIRECT_URI');
-  return u;
+
+/** Env-or-throw — used only when no config object was passed in (dev/test path). */
+function envConfig(): OAuthConfig {
+  if (!process.env.GOOGLE_CLIENT_ID) throw notConfigured('GOOGLE_CLIENT_ID');
+  if (!process.env.GOOGLE_CLIENT_SECRET) throw notConfigured('GOOGLE_CLIENT_SECRET');
+  if (!process.env.GOOGLE_REDIRECT_URI) throw notConfigured('GOOGLE_REDIRECT_URI');
+  return envGoogleConfig()!;
 }
 
 // ---- PKCE (RFC 7636, S256) — Google supports it for web clients at no setup cost ----
@@ -59,11 +80,13 @@ export function generatePkce(): PkcePair {
   return { verifier, challenge };
 }
 
-/** Build the Google consent URL. `state` is the single-use CSRF token (hashed in DB by caller). */
-export function buildConsentUrl(state: string, codeChallenge: string): string {
+/** Build the Google consent URL. `state` is the single-use CSRF token (hashed in DB by caller).
+ *  `cfg` is the resolved OAuth client config (Settings form > env); omitted ⇒ env-only. */
+export function buildConsentUrl(state: string, codeChallenge: string, cfg?: OAuthConfig): string {
+  const c = cfg ?? envConfig();
   const p = new URLSearchParams({
-    client_id: clientId(),
-    redirect_uri: redirectUri(),
+    client_id: c.clientId,
+    redirect_uri: c.redirectUri,
     response_type: 'code',
     scope: OAUTH_SCOPES,
     access_type: 'offline', // get a refresh_token
@@ -83,12 +106,13 @@ export interface TokenSet {
 }
 
 /** Pure builder (unit-testable, no network): authorization-code token request incl. PKCE verifier. */
-export function tokenRequestBody(code: string, codeVerifier?: string): URLSearchParams {
+export function tokenRequestBody(code: string, codeVerifier?: string, cfg?: OAuthConfig): URLSearchParams {
+  const c = cfg ?? envConfig();
   const body = new URLSearchParams({
     code,
-    client_id: clientId(),
-    client_secret: clientSecret(),
-    redirect_uri: redirectUri(),
+    client_id: c.clientId,
+    client_secret: c.clientSecret,
+    redirect_uri: c.redirectUri,
     grant_type: 'authorization_code',
   });
   if (codeVerifier) body.set('code_verifier', codeVerifier); // PKCE: proof of the S256 challenge
@@ -96,11 +120,11 @@ export function tokenRequestBody(code: string, codeVerifier?: string): URLSearch
 }
 
 /** Exchange an authorization code for access + refresh tokens. */
-export async function exchangeCode(code: string, codeVerifier: string): Promise<TokenSet> {
+export async function exchangeCode(code: string, codeVerifier: string, cfg?: OAuthConfig): Promise<TokenSet> {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: tokenRequestBody(code, codeVerifier),
+    body: tokenRequestBody(code, codeVerifier, cfg),
   });
   if (!res.ok) {
     throw new AppError(ErrorCodes.PROVIDER_ERROR, `Token exchange failed (${res.status})`);
@@ -120,14 +144,15 @@ export async function exchangeCode(code: string, codeVerifier: string): Promise<
 }
 
 /** Refresh an access token using the stored refresh_token. */
-export async function refreshAccessToken(refreshToken: string): Promise<TokenSet> {
+export async function refreshAccessToken(refreshToken: string, cfg?: OAuthConfig): Promise<TokenSet> {
+  const c = cfg ?? envConfig();
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       refresh_token: refreshToken,
-      client_id: clientId(),
-      client_secret: clientSecret(),
+      client_id: c.clientId,
+      client_secret: c.clientSecret,
       grant_type: 'refresh_token',
     }),
   });

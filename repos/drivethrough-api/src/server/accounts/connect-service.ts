@@ -8,14 +8,18 @@ import { getDb } from '../db/client';
 import { accounts, storageUsage, oauthStates, users } from '../db/schema';
 import { hashToken, generateToken, encryptSecret, decryptSecret } from '../crypto/vault';
 import {
-  buildConsentUrl, exchangeCode, ensureRootFolder, fetchAbout, generatePkce, refreshAccessToken,
+  buildConsentUrl, exchangeCode, ensureRootFolder, fetchAbout, generatePkce, googleNotConfigured,
+  refreshAccessToken,
 } from '../providers/google-oauth';
+import { resolveGoogleOAuthConfig } from './provider-config-service';
 
 const STATE_TTL_MS = 10 * 60 * 1000; // flow.md §3: 10 min TTL
 
 /** Start a Drive connect flow: mint single-use state (bound to user, PKCE verifier kept
  *  server-side), return Google's consent URL (S256 challenge in the URL). */
 export async function startGoogleConnect(userId: string): Promise<{ authUrl: string }> {
+  const cfg = await resolveGoogleOAuthConfig(); // Settings form (DB) > env fallback
+  if (!cfg) throw googleNotConfigured();
   const raw = generateToken(32);
   const pkce = generatePkce();
   const db = getDb();
@@ -27,7 +31,7 @@ export async function startGoogleConnect(userId: string): Promise<{ authUrl: str
     codeVerifier: pkce.verifier,
     expiresAt: new Date(Date.now() + STATE_TTL_MS),
   });
-  return { authUrl: buildConsentUrl(raw, pkce.challenge) };
+  return { authUrl: buildConsentUrl(raw, pkce.challenge, cfg) };
 }
 
 /**
@@ -58,9 +62,12 @@ export async function handleGoogleCallback(code: string, state: string): Promise
   if (row.expiresAt.getTime() < Date.now()) throw new AppError(ErrorCodes.VALIDATION_FAILED, 'State expired');
   if (!row.codeVerifier) throw new AppError(ErrorCodes.VALIDATION_FAILED, 'State missing PKCE verifier');
 
+  const cfg = await resolveGoogleOAuthConfig();
+  if (!cfg) throw googleNotConfigured();
+
   // exchange code → tokens (throws PROVIDER_ERROR if Google rejects); the PKCE verifier
   // proves the code belongs to this exact flow (code-interception guard)
-  const tokens = await exchangeCode(code, row.codeVerifier);
+  const tokens = await exchangeCode(code, row.codeVerifier, cfg);
 
   // ONE about.get call = quota + authorizing user. Identity is Google's stable
   // permissionId — never email (email can change; the old email-keying could even merge
@@ -148,8 +155,10 @@ export async function syncAccountQuota(accountId: string): Promise<void> {
   if (!acct.refreshTokenEnc || !acct.rootFolderId) {
     throw new AppError(ErrorCodes.ACCOUNT_NEEDS_REAUTH, 'Account missing credentials');
   }
+  const cfg = await resolveGoogleOAuthConfig();
+  if (!cfg) throw googleNotConfigured();
   const refresh = decryptForAccount(acct.refreshTokenEnc, acct.id);
-  const tokens = await refreshAccessToken(refresh); // throws ACCOUNT_NEEDS_REAUTH on revoke (G8)
+  const tokens = await refreshAccessToken(refresh, cfg); // throws ACCOUNT_NEEDS_REAUTH on revoke (G8)
   const about = await fetchAbout(tokens.accessToken);
   const now = new Date();
   await db.update(accounts).set({

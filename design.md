@@ -249,7 +249,7 @@ Minimal: file name, size, mime, provider-agnostic preview (image inline / video 
 
 - **Quota:** combined hero number + stacked bar; per-account cards: name/email, provider badge, used/total, reserved, last sync (+ manual "Sync now" with cooldown), status (`connected/needs_reauth/disabled`), disconnect (confirm dialog naming dependent files).
 - **Routing policy:** three-option segmented control (`most_available | round_robin | priority`) with plain-language descriptions + drag-order list when `priority` selected (9Drive parity).
-- **Accounts:** connect buttons (Google OAuth button, S3 modal with endpoint/bucket/keys + "Test connection" + endpoint SSRF warning note).
+- **Accounts:** Google OAuth credentials card (client ID / secret / redirect URI with Copy — 9Drive parity: configured **in-app**, stored encrypted, secret write-only via `hasSecret`) gating the Connect button; S3 modal with endpoint/bucket/keys + "Test connection" + endpoint SSRF warning note.
 - **Diagnostics:** health card (DB, last cron runs, per-account last error) — from `/api/health`.
 
 ---

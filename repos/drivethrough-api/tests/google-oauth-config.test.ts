@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { ErrorCodes } from '@drivethrough/contracts';
 import { AppError } from '../src/server/errors';
 import {
-  buildConsentUrl, exchangeCode, generatePkce, tokenRequestBody,
+  buildConsentUrl, envGoogleConfig, exchangeCode, generatePkce, googleNotConfigured, tokenRequestBody,
 } from '../src/server/providers/google-oauth';
 
 const VARS = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'] as const;
@@ -92,8 +92,49 @@ describe('PKCE (RFC 7636, S256)', () => {
 
   it('exchangeCode signature requires a verifier (compile-time contract, runtime guard)', () => {
     setEnv();
-    // exchangeCode(code) without verifier must NOT be callable — typed as (code, codeVerifier).
-    // Runtime check: the exported function arity is 2.
-    expect(exchangeCode.length).toBe(2);
+    // exchangeCode(code) without verifier must NOT be callable — typed as (code, codeVerifier, cfg?).
+    // Runtime check: the exported function arity includes the still-required verifier (2 required
+    // params; the optional cfg makes .length === 3).
+    expect(exchangeCode.length).toBe(3);
+  });
+});
+
+describe('OAuth config sourcing (Settings form > env fallback)', () => {
+  it('envGoogleConfig needs ALL three vars — incomplete env must not half-work', () => {
+    clearEnv();
+    expect(envGoogleConfig()).toBeNull();
+    process.env.GOOGLE_CLIENT_ID = 'only-id';
+    expect(envGoogleConfig()).toBeNull();
+    process.env.GOOGLE_CLIENT_SECRET = 'only-secret';
+    expect(envGoogleConfig()).toBeNull();
+    setEnv();
+    expect(envGoogleConfig()).toEqual({
+      clientId: 'test-id.apps.googleusercontent.com',
+      clientSecret: 'GOCSPX-test',
+      redirectUri: 'https://api.example.com/api/accounts/google/callback',
+    });
+  });
+
+  it('an explicit config object works with env cleared (the in-app Settings-form path)', () => {
+    clearEnv();
+    const cfg = {
+      clientId: 'db-id.apps.googleusercontent.com',
+      clientSecret: 'GOCSPX-fromdb',
+      redirectUri: 'https://api.example.com/cb',
+    };
+    const url = new URL(buildConsentUrl('st', 'ch', cfg));
+    expect(url.searchParams.get('client_id')).toBe('db-id.apps.googleusercontent.com');
+    expect(url.searchParams.get('redirect_uri')).toBe('https://api.example.com/cb');
+    const body = tokenRequestBody('code', 'ver', cfg);
+    expect(body.get('client_secret')).toBe('GOCSPX-fromdb');
+  });
+
+  it('googleNotConfigured points at the in-app form (stable 503, exposed message)', () => {
+    const err = googleNotConfigured();
+    expect(err).toBeInstanceOf(AppError);
+    expect(err.code).toBe(ErrorCodes.SERVICE_NOT_CONFIGURED);
+    expect(err.status).toBe(503);
+    expect(err.expose).toBe(true);
+    expect(err.toResponse().body.message).toContain('Settings');
   });
 });

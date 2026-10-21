@@ -216,6 +216,20 @@ export const oauthStates = pgTable('oauth_states', {
   createdAt: ts(),
 }, (t) => [index('oauth_states_user').on(t.userId)]);
 
+// ---- provider_configs (9Drive parity, adopted 2026-10-21): the app's own Google OAuth
+// client credentials, entered through the Settings UI (their /system/google-config pattern)
+// instead of env vars. Encrypted with AAD = row id; the secret is WRITE-ONLY over the wire —
+// only a hasSecret flag ever leaves the server. One config per provider (single-owner app).
+export const providerConfigs = pgTable('provider_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  provider: providerKind('provider').notNull().unique(),
+  clientIdEnc: text('client_id_enc'),
+  clientSecretEnc: text('client_secret_enc'),
+  redirectUri: text('redirect_uri').notNull(),
+  createdAt: ts(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+});
+
 // ---- audit_logs ----
 export const auditLogs = pgTable('audit_logs', {
   id: uuid('id').primaryKey().defaultRandom(),

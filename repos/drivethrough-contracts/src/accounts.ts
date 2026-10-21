@@ -40,3 +40,33 @@ export const SyncQuotaResponse = z.object({
   usage: AccountUsage.nullable(),
 });
 export type SyncQuotaResponse = z.infer<typeof SyncQuotaResponse>;
+
+// ---- Google OAuth client config (9Drive parity: /system/google-config) ----
+// The deployment owner enters the app's Google OAuth client credentials in the Settings UI;
+// the server stores them encrypted. The client secret is WRITE-ONLY over the wire — only
+// `hasSecret` ever leaves the server.
+
+// GET /api/system/google-config
+export const GoogleConfigStatus = z.object({
+  exists: z.boolean(), // would the connect flow work right now?
+  clientId: z.string(), // public half — it rides in the consent URL anyway
+  redirectUri: z.string(),
+  hasSecret: z.boolean(), // secret stored? (never the secret itself)
+  defaultRedirectUri: z.string(), // suggested value (env/VERCEL_URL-derived)
+});
+export type GoogleConfigStatus = z.infer<typeof GoogleConfigStatus>;
+
+// POST /api/system/google-config
+export const SaveGoogleConfigRequest = z.object({
+  clientId: z.string().trim().min(1),
+  clientSecret: z.string().trim().min(1).optional(), // omitted ⇒ keep the stored secret
+  redirectUri: z.string().url(),
+});
+export type SaveGoogleConfigRequest = z.infer<typeof SaveGoogleConfigRequest>;
+
+export const SaveGoogleConfigResponse = z.object({
+  message: z.string(),
+  hasSecret: z.boolean(),
+  redirectUri: z.string(),
+});
+export type SaveGoogleConfigResponse = z.infer<typeof SaveGoogleConfigResponse>;

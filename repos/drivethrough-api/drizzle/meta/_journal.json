@@ -15,6 +15,13 @@
       "when": 1792515335218,
       "tag": "0001_add_oauth_pkce_pid_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792570237552,
+      "tag": "0002_add_provider_configs",
+      "breakpoints": true
     }
   ]
 }

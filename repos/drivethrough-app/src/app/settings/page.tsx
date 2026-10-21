@@ -9,7 +9,8 @@ import { useAuth } from '@/client/auth-context';
 import {
   listAccounts, connectGoogleAccount, syncAccountQuota, disconnectAccount, readConnectResult,
 } from '@/client/accounts';
-import type { Account } from '@drivethrough/contracts';
+import { getGoogleConfigStatus, saveGoogleConfig } from '@/client/system';
+import type { Account, GoogleConfigStatus } from '@drivethrough/contracts';
 
 function human(bytes: string | null): string {
   if (bytes === null) return '—';
@@ -28,10 +29,20 @@ function SettingsContent() {
   const [banner, setBanner] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Google OAuth client config (9Drive parity — configured in-app, secret write-only)
+  const [cfg, setCfg] = useState<GoogleConfigStatus | null>(null);
+  const [formClientId, setFormClientId] = useState('');
+  const [formClientSecret, setFormClientSecret] = useState('');
+  const [formRedirectUri, setFormRedirectUri] = useState('');
 
   const refresh = useCallback(async () => {
     try {
-      setAccounts(await listAccounts());
+      const [acctList, cfgStatus] = await Promise.all([listAccounts(), getGoogleConfigStatus()]);
+      setAccounts(acctList);
+      setCfg(cfgStatus);
+      // functional updates: never clobber what the user is typing on a background refresh
+      setFormClientId((v) => v || cfgStatus.clientId);
+      setFormRedirectUri((v) => v || cfgStatus.redirectUri || cfgStatus.defaultRedirectUri);
       setError(null);
     } catch (err) {
       setError((err as { message?: string }).message ?? 'Failed to load accounts');
@@ -160,14 +171,87 @@ function SettingsContent() {
         })}
       </div>
 
+      {/* Google OAuth client credentials — 9Drive parity (their Settings form): entered once,
+          stored AES-encrypted server-side; the secret is write-only (hasSecret flag only). */}
+      <section className="mt-6 rounded-[var(--radius-surface)] border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium">Google Drive API credentials</h2>
+          <span className={`text-xs ${cfg?.exists ? 'text-[var(--color-free)]' : 'text-zinc-400'}`}>
+            {cfg === null ? '…' : cfg.exists ? 'Configured' : 'Not configured'}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-zinc-500">
+          One-time setup: create an OAuth client in Google Cloud Console (enable Drive API → consent
+          screen → Web client with the redirect URI below), then paste its ID and secret here.
+          Saved encrypted; the secret can never be read back.
+        </p>
+        <div className="mt-3 space-y-2">
+          <input
+            value={formClientId}
+            onChange={(e) => setFormClientId(e.target.value)}
+            placeholder="Client ID — ….apps.googleusercontent.com"
+            autoComplete="off"
+            className="h-10 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm dark:border-zinc-700"
+          />
+          <input
+            type="password"
+            value={formClientSecret}
+            onChange={(e) => setFormClientSecret(e.target.value)}
+            placeholder={cfg?.hasSecret ? '•••••• (saved — leave blank to keep)' : 'Client secret — GOCSPX-…'}
+            autoComplete="new-password"
+            className="h-10 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm dark:border-zinc-700"
+          />
+          <div className="flex gap-2">
+            <input
+              value={formRedirectUri}
+              onChange={(e) => setFormRedirectUri(e.target.value)}
+              placeholder="Redirect URI"
+              autoComplete="off"
+              className="h-10 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm dark:border-zinc-700"
+            />
+            <button
+              type="button"
+              disabled={!formRedirectUri}
+              onClick={() => { if (formRedirectUri) void navigator.clipboard.writeText(formRedirectUri); }}
+              className="h-10 shrink-0 rounded-[var(--radius-control)] border border-zinc-300 px-3 text-xs hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={busyId === 'cfg' || !formClientId.trim() || !formRedirectUri.trim()}
+          onClick={() =>
+            void guard(async () => {
+              await saveGoogleConfig({
+                clientId: formClientId.trim(),
+                ...(formClientSecret.trim() ? { clientSecret: formClientSecret.trim() } : {}),
+                redirectUri: formRedirectUri.trim(),
+              });
+              setFormClientSecret(''); // never keep the secret in component state after save
+              setBanner({ kind: 'ok', text: 'Google credentials saved (encrypted).' });
+            }, 'cfg')
+          }
+          className="mt-3 h-10 rounded-[var(--radius-control)] border border-zinc-300 px-4 text-sm hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          {busyId === 'cfg' ? 'Saving…' : 'Save credentials'}
+        </button>
+      </section>
+
       <button
         type="button"
-        disabled={busyId === 'global'}
+        disabled={busyId === 'global' || cfg?.exists === false}
         onClick={() => void guard(() => connectGoogleAccount())}
         className="mt-4 h-11 w-full rounded-[var(--radius-control)] bg-[var(--color-accent)] text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
       >
         {busyId === 'global' ? 'Redirecting to Google…' : 'Connect Google Drive'}
       </button>
+      {cfg?.exists === false && (
+        <p className="mt-1 text-xs text-zinc-400">
+          Save your Google API credentials above first — then this button opens Google&apos;s consent page.
+        </p>
+      )}
 
       <p className="mt-2 text-xs text-zinc-400">
         S3-compatible accounts (R2 / B2 / MinIO) get their connect form in P0.1.
