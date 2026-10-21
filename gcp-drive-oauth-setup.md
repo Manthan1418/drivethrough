@@ -1,92 +1,230 @@
-# Roadmap: getting the Google OAuth credentials to connect a Drive account
+# 🚀 Connect Google Drive to DriveThrough — the picture-book setup
 
-> One-time, ~10 minutes, completely free. These steps create the app's "passport" to Google
-> (Client ID + Secret). They happen **in Google's console** — no app can do them for you.
-> Once created, the values are pasted into DriveThrough's **Settings form** (not env vars —
-> the 9Drive-parity in-app config). `GOOGLE_*` env entries are only a local-dev fallback.
+> **Who this is for:** anyone, no experience needed. Just start at Step 1 and go down.
+> **Time:** ~10 minutes. **Cost:** ₹0 / $0 — everything here is free.
+> **Rule:** every step shows 🖱️ what to click, 👀 what you should see, ✅ how to know it worked.
 
-## Phase 0 — Before you start
+---
 
-- You need: one Google account (the Drive you want to connect), and a browser that can reach
-  `console.cloud.google.com` (if you saw `ERR_CERT_COMMON_NAME_INVALID` earlier, your network
-  intercepts Google — use a mobile hotspot for this setup).
-- The "unverified app" warning during consent is **normal** for your own app in Testing mode.
+## 🧭 Your whole journey on one screen
 
-## Phase 1 — Create the project (2 min)
+| Phase | What you're doing | Time | Done? |
+|---|---|---|---|
+| 1 | 🏗️ Create a "project" (a workspace at Google) | 2 min | ☐ |
+| 2 | ⚡ Turn on the Drive API | 1 min | ☐ |
+| 3 | 📝 Fill the consent form (what your app asks for) | 3 min | ☐ |
+| 4 | 🔑 Create the keys: **Client ID + Secret** | 2 min | ☐ |
+| 5 | 📋 Paste the keys into DriveThrough's Settings | 1 min | ☐ |
+| 6 | 🎉 Press **Connect Google Drive** | 1 min | ☐ |
 
-1. Open 👉 **https://console.cloud.google.com/** and sign in with that Google account.
-2. Project dropdown (top-left) → **New Project** → name `DriveThrough` → **Create**.
-3. Wait for creation, then make sure the top bar shows **DriveThrough** (the dropdown).
+---
 
-## Phase 2 — Enable the Drive API (1 min)
+## 🧠 What are "credentials", in plain words? (30 seconds, no jargon)
 
-4. Open 👉 **https://console.cloud.google.com/apis/library/drive.googleapis.com**
-   (confirm the project selector says DriveThrough) → **Enable**.
+Google will give you **two strings** — think of them as your app's **name tag** and **password**:
 
-## Phase 3 — OAuth consent screen (4 min)
+| The string | Looks like | It's like | Keep it safe? |
+|---|---|---|---|
+| **Client ID** | `12345-abc.apps.googleusercontent.com` | Your app's **name tag** — Google shows it on the consent screen | Not secret, but keep it tidy |
+| **Client secret** | `GOCSPX-...` | Your app's **password** — only your server may use it | 🤫 **Yes — like a password. Never chat/email it.** |
 
-5. Open 👉 **https://console.cloud.google.com/apis/credentials/consent**
-6. User type: **External** → **Create**.
-7. App information: app name `DriveThrough` · user support email = your Gmail ·
-   developer contact = your Gmail → **Save and continue**.
-8. **Scopes** → **Add or remove scopes** → search `drive` → tick
-   `https://www.googleapis.com/auth/drive` (the full Drive scope) → **Update** → **Save and continue**.
-   - Why full scope: DriveThrough must manage files *and* create reader-only share links;
-     it never issues `writer` permissions (prd.md / design.md rule).
-9. **Test users** → **Add users** → type your Gmail → **Save and continue** → **Back to dashboard**.
-   - In Testing mode only added test users can consent — you're added, so you're covered.
-     Publishing/verifying the app with Google is **not** needed for personal use.
+You create them **once**, at Google. DriveThrough then stores them **encrypted** (its Settings
+form) — and every time you click *Connect Google Drive*, Google asks **you** (on Google's own
+page) to pick an account and approve. **No app ever sees your Google password.**
 
-## Phase 4 — Create the OAuth client (3 min)
+> 💾 **Beginner tip before you start:** open a blank text file (Notepad/Notes) and keep it
+> ready to paste the two strings into. Google shows the secret **only once**!
 
-10. Open 👉 **https://console.cloud.google.com/apis/credentials**
-    → **Create Credentials** → **OAuth client ID**.
-11. Application type: **Web application**. Name: `drivethrough-web`.
-12. **Authorized redirect URIs** → **Add URI** → paste **exactly** (the Settings card's Copy
-    button gives you this string):
-    ```
-    https://drivethrough-kek7.vercel.app/api/accounts/google/callback
-    ```
-    - Optional second URI if you'll run the backend locally:
-      `http://localhost:3001/api/accounts/google/callback`
-    - `https`, correct `kek7` domain, **no trailing slash**.
-    - Leave *Authorized JavaScript origins* empty (redirect flow, no popup).
-13. **Create** → a popup shows your **Client ID** (`….apps.googleusercontent.com`) and
-    **Client secret** (`GOCSPX-…`). Copy both now — **the secret is shown only once**.
-    Lost it? Delete this client in the list and create a new one (2 min).
+---
 
-## Phase 5 — Paste into DriveThrough (1 min)
+# ✅ Phase 1 — Create the project (2 min)
 
-14. Open 👉 **https://drivethrough-navy.vercel.app/settings**
-    → card **"Google Drive API credentials"**.
-15. Paste the **Client ID** and **Client secret**; the **Redirect URI** field is already
-    pre-filled with the correct `kek7` URL (use **Copy** for step 12). → **Save credentials**.
-    - The chip flips to **Configured**; the secret can never be read back (write-only).
-    - Local dev only, optionally: same two values into `repos/drivethrough-api/.env`
-      (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`). Not needed for prod.
+### Step 1 — Open the Google Cloud Console
+🌐 Open: **https://console.cloud.google.com/**
+🖱️ Sign in with **the Google account whose Drive you want to connect**.
 
-## Phase 6 — Connect the account (1 min)
+> ⚠️ If the page shows a certificate error or won't load: your network is interfering with
+> Google — switch to your phone's **mobile hotspot**, then reload.
 
-16. Click **Connect Google Drive** → Google's own page opens → pick the account →
-    **Advanced → Go to DriveThrough (unsafe)** → **Allow/Approve** → you land back on
-    Settings with the account card + synced quota.
+### Step 2 — Make a new project
+🖱️ Look at the **top-left corner**: there's a dropdown that may say *"Select a project"* or
+shows some project name. **Click it.**
+🖱️ A panel opens → click **New Project** (top-right of that panel).
+⌨️ In "Project name" type: `DriveThrough`
+🖱️ Click **CREATE** (bottom-right).
+👀 You'll see a small spinning "Notifications" popup — wait ~15 seconds.
 
-## Troubleshooting
+### ✅ Checkpoint 1
+🖱️ Look at the top bar again — it must say **`DriveThrough ▾`**.
+If it doesn't: click the dropdown and **select** DriveThrough from the list.
 
-| Symptom | Cause & fix |
+---
+
+# ✅ Phase 2 — Turn on the Drive API (1 min)
+
+### Step 3 — Enable it with one click
+🌐 Open: **https://console.cloud.google.com/apis/library/drive.googleapis.com**
+👀 You'll see a page titled **Google Drive API** with a big blue button.
+🖱️ (If asked which project, pick **DriveThrough**.)
+🖱️ Click **ENABLE**. Wait ~20 seconds until the page reloads.
+
+### ✅ Checkpoint 2
+The page now has tabs like *API Services / Credentials* at the top — that means it's on.
+(If you ever need to disable it, you'd find it under APIs & Services → Enabled APIs.)
+
+---
+
+# ✅ Phase 3 — The consent screen (what your app is allowed to ask for) (3 min)
+
+> This tells Google *what your app wants permission to do*, and lists **you** as a tester.
+
+### Step 4 — Start the form
+🌐 Open: **https://console.cloud.google.com/apis/credentials/consent**
+🖱️ You'll see "Audience" or "OAuth consent screen": choose **External** → click **CREATE**.
+
+### Step 5 — Basic info
+Fill the form:
+
+| Field | Type this |
 |---|---|
-| Button greyed out / 503 before saving | Expected — no credentials yet. Do Phase 5 first. |
-| Google error `redirect_uri_mismatch` | The URI in GCP differs byte-for-byte. Edit the client in Phase 4 step 12; no re-pasting needed. |
-| Google error `invalid_client` | Wrong/rotated Client ID or secret — re-paste in Phase 5; or the client was deleted. |
-| "Access blocked: app isn't verified" | Click **Advanced → Go to DriveThrough**. Still blocked ⇒ you're not in Test users (Phase 3 step 9). |
-| Consent loop / "stopped application" | The OAuth client was deleted in GCP — recreate (Phase 4) and re-paste. |
-| `console.cloud.google.com` won't load | Network intercepts Google (cert error) — use a hotspot (Phase 0). |
-| Secret lost after creation | GCP never shows it again — delete the client, create a fresh one, re-paste. |
+| App name | `DriveThrough` |
+| User support email | pick **your Gmail** from the dropdown |
+| Developer contact information | type **your Gmail** |
 
-## What each value is for (keep-safe notes)
+🖱️ Click **SAVE AND CONTINUE** (bottom).
 
-- **Client ID** — public "who is this app" marker; rides in every consent URL; stored encrypted
-  but not secret-classified.
-- **Client secret** — proves only the DriveThrough backend may exchange auth codes for tokens.
-  Stored AES-256-GCM in `provider_configs`; **write-only over the wire** (`hasSecret` only).
-  Treat it like a password; never paste it in chat.
+### Step 6 — Scopes (what access the app may request)
+🖱️ Click **ADD OR REMOVE SCOPES**.
+🖱️ In the search box type: `drive`
+🖱️ Tick the one that says **`.../auth/drive`** — its description mentions *"See, edit, delete"* —
+that's the full Drive access DriveThrough needs to store and share your files.
+🖱️ Click **UPDATE**, then **SAVE AND CONTINUE**.
+
+### Step 7 — Add yourself as a tester (important!)
+🖱️ Click **ADD USERS**.
+⌨️ Type your Gmail address → press Enter → click **ADD**.
+🖱️ Click **SAVE AND CONTINUE**, then scroll down and click **BACK TO DASHBOARD**.
+
+### ✅ Checkpoint 3
+The dashboard shows your app `DriveThrough`, status **Testing**.
+That's perfect — in Testing mode only people you listed can use it, which is exactly you.
+
+> ℹ️ You do **NOT** need to "publish" or verify the app with Google. Personal use = Testing mode forever. ✔️
+
+---
+
+# ✅ Phase 4 — Create the keys (2 min) — the important part
+
+### Step 8 — Open the credentials page
+🌐 Open: **https://console.cloud.google.com/apis/credentials**
+🖱️ Click **+ CREATE CREDENTIALS** (top bar) → **OAuth client ID**.
+
+### Step 9 — Describe the app
+| Field | Choose/type |
+|---|---|
+| Application type | **Web application** |
+| Name | `drivethrough-web` |
+
+### Step 10 — Add the return address (⚠️ copy-paste exactly)
+This tells Google: "only send people back to THIS address" — a safety feature.
+
+🖱️ Find **Authorized redirect URIs** → click **+ ADD URI**.
+📋 **Paste this exactly** (use the Copy button at DriveThrough Settings later if unsure):
+
+```
+https://drivethrough-kek7.vercel.app/api/accounts/google/callback
+```
+
+> ⚠️ Must have **https**, the word **kek7**, and **no trailing slash** at the end.
+> (Leave "Authorized JavaScript origins" empty — we don't need it.)
+
+### Step 11 — Get your keys 🎁
+🖱️ Click **CREATE**.
+👀 A popup titled **"OAuth client created"** shows two strings.
+
+### 🚨 Do this NOW — the secret is shown only ONCE:
+📋 Copy **Client ID** → paste into your notes file.
+📋 Copy **Client secret** → paste into your notes file.
+🖱️ Click **OK** / **DOWNLOAD JSON** (your choice) to close.
+
+> 🤫 Treat the **client secret** like a password. If you lose it: go back to
+> Credentials → click the client name → delete it → repeat Steps 8–11 (2 min).
+
+### ✅ Checkpoint 4
+The Credentials page now lists one row: `drivethrough-web` · type *Web client*.
+You have **two strings saved in your notes**.
+
+---
+
+# ✅ Phase 5 — Paste the keys into DriveThrough (1 min)
+
+### Step 12 — Open DriveThrough Settings
+🌐 Open: **https://drivethrough-navy.vercel.app/settings**
+(Sign in first if asked.)
+👀 You'll see a card titled **"Google Drive API credentials"** with status **Not configured**.
+
+### Step 13 — Fill the card
+
+| Field | What to put |
+|---|---|
+| **Client ID** | paste from your notes |
+| **Client secret** | paste from your notes |
+| **Redirect URI** | already pre-filled ✔️ — if not, paste the same URL from Step 10 |
+
+🖱️ Click **Save credentials**.
+👀 The status flips to **🟢 Configured**, and the secret field now reads
+*"•••••• (saved — leave blank to keep)"* — that's security working: **nobody can read it back**.
+
+### ✅ Checkpoint 5
+Status chip = **Configured**, and the big orange **Connect Google Drive** button is no longer greyed out.
+
+---
+
+# ✅ Phase 6 — Connect your Drive 🎉 (1 min)
+
+### Step 14 — The moment of truth
+🖱️ Click **Connect Google Drive**.
+👀 Your browser goes to **Google's own page** — account picker.
+🖱️ Pick the account you want to connect.
+🖱️ You'll see *"Google hasn't verified this app"* — click **Advanced** →
+**Go to DriveThrough (unsafe)**. *(Safe: it's YOUR app; "unverified" just means you skipped
+Google's paid verification review, which personal apps never need.)*
+🖱️ Click **Allow**.
+
+### ✅ Final checkpoint 🎊
+You land back on **Settings** with a green banner *"Drive connected — quota synced."*
+and a new **account card** showing your email + a quota bar.
+Your Drive is now pooled into DriveThrough.
+
+---
+
+# 🆘 Something broke? Find your exact message here
+
+| You see… | What happened | Fix |
+|---|---|---|
+| Greyed-out button / "isn't configured" | Keys not saved yet | Finish Phase 5 |
+| Google page: **`redirect_uri_mismatch`** | The address in GCP differs from ours (often a typo or trailing `/`) | GCP → Credentials → click `drivethrough-web` → edit the redirect URI to match Step 10 exactly → Save. **No need to re-paste keys.** |
+| Google page: **`invalid_client`** | Wrong keys, or the client was deleted | Re-copy ID+secret from GCP → re-save in Settings |
+| "Access blocked" / "app isn't verified" | Normal for Testing-mode apps | Click **Advanced → Go to DriveThrough**. Still blocked? You're missing from Test users (Step 7) |
+| Console page won't load / certificate error | Your network intercepts Google | Use your phone's **hotspot** and redo the phases |
+| Accidentally closed the secret popup | Google shows it only once | Delete the client in GCP → repeat Steps 8–11 |
+| 500/503 when clicking Connect before Phase 5 | Expected — no keys existed | Save keys first, then connect |
+| Connected but quota shows "—" | First sync still running | Click **Sync** on the account card, or wait ~30 s and refresh |
+
+---
+
+# 📖 Mini-glossary (for the curious)
+
+| Term | Meaning |
+|---|---|
+| **Google Cloud project** | A free folder at Google that owns your app's settings & keys |
+| **OAuth consent screen** | The page where *you* approve what an app may access |
+| **Client ID / Secret** | Your app's name tag / password at Google (Phases 4–5) |
+| **Redirect URI** | The exact address Google may send you back to after approving |
+| **Testing mode** | Only users you listed can consent — perfect for personal apps |
+| **Encrypted at rest** | DriveThrough scrambles the secret (AES-256-GCM) in its database; only the server can unscramble it |
+
+---
+
+*Maintenance note: values live in DriveThrough's Settings (9Drive-parity in-app config);
+`GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI` env vars are only a local-dev fallback.*
