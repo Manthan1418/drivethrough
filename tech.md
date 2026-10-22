@@ -236,6 +236,8 @@ Escape hatches if Drive relay ever becomes the bottleneck, in order: (1) more S3
 
 Spikes S1–S2 happen **before** building the full UI (they can invalidate §6 choices).
 
+**✅ S1 + S2 completed 2026-10-22 — memo: [`spikes/S1-S2-v1.md`](spikes/S1-S2-v1.md).** Outcomes: **S1 GO on variant A** (proxy 1.7–2.2 MB/s ≈ direct-from-Drive 1.3–4.2 MB/s on the same client ⇒ Vercel is *not* the limiter; Range/206 + ≤ 16 MB windows validated; Worker relay stays contingency only; egress budget flagged as watch item). **S2 GO on raw 4 MB `Content-Range` PUT** (`duplex:'half'` holds, RSS stable, 32 MB reassembled 308×7→200; single bodies > ~4.5 MB confirmed **413 `FUNCTION_PAYLOAD_TOO_LARGE` at the edge** ⇒ chunk size 4 MB stays the hard design constant; multipart and Worker-relay options **not adopted**). S5 closed 2026-10-20. S3/S4/S6 still open per their rows.
+
 ---
 
 ## 8. Security requirements

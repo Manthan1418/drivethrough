@@ -1,6 +1,6 @@
 # Build status — updated as work proceeds
 
-**Phase: P0.0 (spikes + schema port). Started 2026-10-20.**
+**Phase: P0.0 ✅ COMPLETE (2026-10-22) — spikes S1+S2+S5 all closed (memo: `spikes/S1-S2-v1.md`), DB port + production Drive connect verified. Next: P0.2 (Google provider file layer), then P0.3–P0.6 per tech.md §12.**
 
 ## Done (no accounts required — pure file writing)
 - **Docs synced to owner decisions (monorepo, keyless auth)** — tech.md §1/§2/§8, design.md §7/§8 (incl. new tradeoff row), flow.md §2, prd.md, AGENTS.md, vercel-limits skill: every "two repos / firebase-admin / service-account JSON / revocation checks" reference rewritten to current reality.
@@ -22,11 +22,11 @@
 ## Next up (in order, per tech.md §12)
 1. Owner completes account setup (table above) → fills each package's `.env` (the files exist; secret values go straight into them, never into chat).
 2. ✅ **Pushed 2026-10-20** — monorepo instead of three repos (owner decision): root commit `88ec0be` → `github.com/Manthan1418/drivethrough` (branch `main`, SSH auth). `<ORG>` git-deps removed (npm workspaces `"*"` + root `postinstall` builds contracts). ✅ `npm install` + **all verification gates green** (typecheck ×3, vitest 8/8, build ×2 — see Done).
-3. Spike S2 (chunk streaming under Vercel) — self-contained, needs only Vercel.
-4. Spike S1 variant A (Vercel Drive proxy) + variant B (free Worker relay) — needs Google + Vercel.
-5. Spike S5 (cross-origin Firebase guard) — needs Firebase + both Vercel projects.
-6. Migrate schema to Neon (`db:generate` + `db:migrate`).
-7. Then P0.1 foundation (wiring services into route handlers).
+3. ✅ **Spike S2 (2026-10-22)** — `duplex:'half'` streaming **holds**: 32 MB built as 8×4 MB raw `Content-Range` PUTs → Drive `308×7 → 200`, RSS stable 93→129 MB (no buffering); single 8 MB / 16 MB bodies → **413 `FUNCTION_PAYLOAD_TOO_LARGE` at the edge** ⇒ chunk size **4 MB locked**, multipart + Worker-relay options *not adopted* (P1/P2 contingencies only).
+4. ✅ **Spike S1 variant A (2026-10-22)** — proxy 1.7–2.2 MB/s ≈ direct-from-Drive baseline 1.3–4.2 MB/s on the same client ⇒ **Vercel is not the bottleneck**; Range 206 + ≤16 MB windows validated; **variant A adopted**, variant B (Worker) not needed — stays contingency; egress-budget watch item recorded. Memo: `spikes/S1-S2-v1.md`.
+5. ✅ **Spike S5** — cross-origin bearer auth verified live 2026-10-20 (preflight 204/403, ACAO on success *and* error paths, garbage token 401).
+6. ✅ **Migrate schema to Neon** — 14 tables (`0000`) + `0001` oauth PKCE/pid index + `0002` provider_configs, all applied & verified.
+7. **Next: P0.2 — Google provider file layer** (folder listings, resumable upload proxy, Range download proxy, quota sync — on the primitives the spikes just proved) → P0.3 (folders/files CRUD, uploader UI, dashboard) → P0.4 → P0.5 → P0.6 → v1.
 
 ## Live on Vercel (2026-10-20)
 
