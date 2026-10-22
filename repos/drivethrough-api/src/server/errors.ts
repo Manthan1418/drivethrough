@@ -63,3 +63,19 @@ export function toApiError(err: unknown): { status: number; body: ApiError } {
   console.error('[internal]', err);
   return { status: 500, body: { code: ErrorCodes.INTERNAL_ERROR, message: 'Internal error' } };
 }
+
+/**
+ * Sanitize an error detail for OUT-OF-BAND channels — the OAuth-callback `?detail=` redirect
+ * and provider messages that embed external (Google) text. Allow-list charset + hard length
+ * cap: redirects land in browser history and client JS, so only step/status-style text may
+ * ride them — and the filter blocks `& = < > ? #` by construction so a crafted upstream
+ * message can never reshape the URL. (Diagnosability fix 2026-10-22: the connect failure
+ * detail used to be swallowed entirely — no log, no banner.)
+ */
+export function safeDetail(message: string): string {
+  return message
+    .replace(/[^A-Za-z0-9 _.,:()/'—-]/g, ' ') // allow-list; em dash kept (house style)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}

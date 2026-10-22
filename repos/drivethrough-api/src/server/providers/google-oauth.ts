@@ -4,7 +4,7 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import { ErrorCodes } from '@drivethrough/contracts';
-import { AppError } from '../errors';
+import { AppError, safeDetail } from '../errors';
 
 const OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/drive', // full drive: file manage + permissions for shares (reader-only)
@@ -127,7 +127,14 @@ export async function exchangeCode(code: string, codeVerifier: string, cfg?: OAu
     body: tokenRequestBody(code, codeVerifier, cfg),
   });
   if (!res.ok) {
-    throw new AppError(ErrorCodes.PROVIDER_ERROR, `Token exchange failed (${res.status})`);
+    // Surface Google's public error name/description — the step+status used to be swallowed
+    // with no log anywhere (caught live 2026-10-22). safeDetail filters the external text.
+    const body = (await res.json().catch(() => null)) as { error?: string; error_description?: string } | null;
+    const ext = [body?.error, body?.error_description].filter(Boolean).join(' — ');
+    throw new AppError(
+      ErrorCodes.PROVIDER_ERROR,
+      safeDetail(`Token exchange failed (${res.status})${ext ? `: ${ext}` : ''}`)
+    );
   }
   const data = (await res.json()) as {
     access_token: string;
@@ -206,7 +213,14 @@ export async function ensureRootFolder(accessToken: string): Promise<string> {
       mimeType: 'application/vnd.google-apps.folder',
     }),
   });
-  if (!created.ok) throw new AppError(ErrorCodes.PROVIDER_ERROR, `Root folder create failed (${created.status})`);
+  if (!created.ok) {
+    const body = (await created.json().catch(() => null)) as { error?: { message?: string } } | null;
+    const ext = body?.error?.message ?? '';
+    throw new AppError(
+      ErrorCodes.PROVIDER_ERROR,
+      safeDetail(`Root folder create failed (${created.status})${ext ? `: ${ext}` : ''}`)
+    );
+  }
   const { id } = (await created.json()) as { id: string };
   return id;
 }
@@ -227,7 +241,14 @@ export interface DriveAbout {
 
 export async function fetchAbout(accessToken: string): Promise<DriveAbout> {
   const res = await driveFetch(accessToken, '/about?fields=storageQuota,user');
-  if (!res.ok) throw new AppError(ErrorCodes.PROVIDER_ERROR, `Quota fetch failed (${res.status})`);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+    const ext = body?.error?.message ?? '';
+    throw new AppError(
+      ErrorCodes.PROVIDER_ERROR,
+      safeDetail(`Quota fetch failed (${res.status})${ext ? `: ${ext}` : ''}`)
+    );
+  }
   const { storageQuota, user } = (await res.json()) as {
     storageQuota?: { usage?: string; limit?: string };
     user?: { permissionId?: string; emailAddress?: string; displayName?: string };

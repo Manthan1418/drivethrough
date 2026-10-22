@@ -269,7 +269,7 @@ Mirrors 9Drive's proven surface, namespaced under `/api`:
 ```
 Auth        Firebase SDK on client (Google + email/password) · every API call carries Authorization: Bearer <ID token> (no session endpoint — cross-origin bearer)
 Accounts    GET /api/accounts · GET /api/accounts/google/start → { authUrl } (frontend navigates there; until Google creds exist — Settings form or env — this returns 503 SERVICE_NOT_CONFIGURED with an honest message — never a raw 500, design.md §6)
-            GET  /api/accounts/google/callback?code&state (Google redirect → 302 to frontend; no bearer — single-use state is the credential)
+            GET  /api/accounts/google/callback?code&state (Google redirect → 302 to frontend; no bearer — single-use state is the credential; on failure → 302 `?connect=error&reason=<code>&detail=<sanitized step/status+Google error>` — banner shows it, server logs the same, never secrets)
             POST /api/accounts/:id/sync-quota · DELETE /api/accounts/:id
 System      GET/POST /api/system/google-config (9Drive parity: the app's Google OAuth client credentials entered in Settings, stored encrypted; secret WRITE-ONLY — only a hasSecret flag leaves the server)
 Storage     GET /api/storage/summary · GET /api/storage/breakdown

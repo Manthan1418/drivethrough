@@ -265,7 +265,7 @@ Minimal: file name, size, mime, provider-agnostic preview (image inline / video 
 | `FILE_TOO_LARGE_FOR_PLAN` | explain + options (split / upgrade / direct link) |
 | `UPSTREAM_QUOTA_EXCEEDED` (Google 750 GB/day) | "Account at daily upload limit — retry in X h" with per-account attribution |
 | `UNAUTHENTICATED` | soft redirect preserving return URL |
-| `SERVICE_NOT_CONFIGURED` | settings inline notice — "Google Drive connect isn't configured on this server yet (missing …)". A 503 with an honest message, **never a raw 500**; the connect button then waits for admin setup instead of crashing |
+| `SERVICE_NOT_CONFIGURED` | settings inline notice — "Google Drive connect isn't configured on this server yet (missing …)". A 503 with an honest message, **never a raw 500**; the connect button then waits for admin setup instead of crashing. Connect-failure diagnosis (added 2026-10-22, caught live): the callback logs the step/status detail server-side and passes it to the settings banner as `?detail=` — charset-filtered via `safeDetail` (allow-list + 120-char cap; status codes and Google's public error names only, **never secrets**, never URL-reshapable) |
 
 ---
 

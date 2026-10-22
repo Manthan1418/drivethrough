@@ -32,9 +32,15 @@ export async function disconnectAccount(accountId: string): Promise<void> {
  * Parse the OAuth callback result from the URL (?connected=1 or ?connect=error&reason=…)
  * after the backend redirects back to /settings. Returns a result object for the toast/banner.
  */
-export function readConnectResult(search: string): { ok: boolean; reason?: string } | null {
+export function readConnectResult(search: string): { ok: boolean; reason?: string; detail?: string } | null {
   const p = new URLSearchParams(search);
   if (p.get('connected') === '1') return { ok: true };
-  if (p.get('connect') === 'error') return { ok: false, reason: p.get('reason') ?? undefined };
+  if (p.get('connect') === 'error') {
+    return {
+      ok: false,
+      reason: p.get('reason') ?? undefined,
+      detail: p.get('detail') ?? undefined, // sanitized step/status text from the backend
+    };
+  }
   return null;
 }

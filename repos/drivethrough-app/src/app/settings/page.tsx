@@ -56,7 +56,7 @@ function SettingsContent() {
       setBanner(
         result.ok
           ? { kind: 'ok', text: 'Drive connected — quota synced.' }
-          : { kind: 'err', text: `Connect failed (${result.reason ?? 'unknown'}). Try again.` }
+          : { kind: 'err', text: `Connect failed (${result.reason ?? 'unknown'})${result.detail ? ` — ${result.detail}` : ''}. Try again.` }
       );
       window.history.replaceState({}, '', window.location.pathname);
     }
