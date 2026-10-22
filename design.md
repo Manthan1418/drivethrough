@@ -216,6 +216,7 @@ Pure function `diff(dbRows, providerObjects) → {create, update, delete, adopt}
 ```
 
 Design decisions:
+- **Chrome & settings (2026-10-22 restyle)** — every surface is a Win98-modernized window (beveled frame + navy gradient title bar; §5.3). The sidebar's bottom row is the user card with the **⚙ button, which opens Settings — Connections as a draggable window**: Google Drive accounts (connect / quota+sync / disconnect) + the OAuth-credentials form. `/settings` survives as a route because Google's OAuth callback 302s there — it renders the same panel (one component, two homes). The browser itself is details-view (Name · Size · Type · Modified · Drv chip), sortable columns, navy row selection, right-click context menus, drag-and-drop upload target, inline rename (F2), move-to folder-tree dialog.
 - **Provider chip per row** — honest about where bytes live (a small `G` / `R2` / `B2` badge), hover shows exact account + free space. The pool is virtual; hiding placement entirely breeds confusion when an account dies.
 - **Upload dock** — bottom-right stacked cards (9Drive's progress panel, kept): per-file progress, pause/resume/cancel, aggregate speed; survives navigation (component at layout level); on resume-after-reload it re-attaches to server sessions automatically.
 - **Placement-failure state** — instead of a bare error, a panel: per-account free bars + "Free up space" / "Choose account" / (P1) "Split across accounts automatically".
@@ -224,18 +225,24 @@ Design decisions:
 
 ### 5.3 Visual language (design tokens)
 
+> **Restyled 2026-10-22 (owner brief: "beautiful retro file explorer, animated, settings at the side"): "Windows 98, modernized", applied to the WHOLE app** (sign-in, explorer, connections, trash, activity, share page — share page keeps minimal chrome). Presented four directions (Win98 / CRT phosphor / Y2K-vaporwave / System 7); owner picked Win98 modernized. "Modernized" = authentic Win98 geometry rendered with AA-contrast inks, crisp modern type and a 120–180 ms motion budget — a real tool, not a costume.
+
 | Token | Value | Rationale |
 |---|---|---|
-| Theme | dark default + light (system) | file-manager convention; long sessions |
-| Radius | 10 px surfaces / 8 px controls | soft but not bubbly |
-| Density | compact rows (40 px), grid cards 160 px | power-user browsing |
-| Type | system UI stack; tabular-nums for sizes/quota | crisp on every device |
-| Accent | single accent (indigo-500) + semantic (green=free, amber=reserved, red=error) | quota bars must read at a glance |
-| Motion | 120–180 ms ease-out; progress bars animate rate-limited (no jitter); context menus fade+scale 3 % | feel of speed, no distraction |
-| Iconography | lucide-react (9Drive parity) | consistent stroke weight |
-| Quota viz | stacked horizontal bar (per-account segments) + legend; numbers humanized (9.4 GB / 15 GB) | "combined pool" made visible |
+| Theme | one world (no dark/light flip): teal desktop `#0d7b76` + 4% 45° dither, silver faces `#c8c8c8`, field face `#ffffff`, title gradients `#000080 → #1084d0` | the retro frame is the product identity |
+| Geometry | radius **0** everywhere; bevels (raised / pressed / thin / sunken) as pure `box-shadow` insets, 1 px light + 1 px dark + 2 px mid ramp | Win98 authenticity, DPR-safe, zero image assets |
+| Ink | `#141414` near-black (never pure black), soft `#4a4a4a`, faint `#6f6f6f` — all ≥ 4.5:1 on face | AA contrast held inside the retro frame |
+| Selection | row select + text `::selection` = title-bar navy `#000080` + white | authentic and instantly recognizable |
+| Type | `Tahoma → Segoe UI → Verdana → system-ui`; `Courier New` for previews; tabular-nums for sizes/quota | carries the Win98 voice on every platform, degrades gracefully, no webfont dependency |
+| Density | root 14 px, rows 28 px, controls 24/32 px, window title bar 26 px | Win98 density, modernized |
+| Semantic | free/ok `#0f6d0f`, warn/reserved `#8a5200`, error `#a40000` | quota bars + status text read at a glance |
+| Motion | 120–180 ms ease-out: windows bloom (fade + 6 px rise + 0.985 scale), menus pop from their corner, progress = segmented navy blocks (+ Win95 marquee when indeterminate), buttons swap bevel on press, sidebar drawer slides | "modernized" half of the brief — buttery everywhere, instant only where Win98 was instant (bevel swap, selection) |
+| Iconography | hand-drawn 16×16 pixel SVG set, `shape-rendering="crispEdges"` (yellow folders, mime-typed files) | consistent chunk, no icon dependency |
+| Focus | 1 px dotted outline, offset inward (Win98 style) | authentic + keyboard accessible |
+| Scrollbars | 16 px bars, dithered track, beveled thumb | detail depth |
+| Reduced motion | every animation + transition collapses under `prefers-reduced-motion` | accessibility |
 
-Conventions: Tailwind CSS 4 tokens for the above; components built on the existing `Button/Card/Input` primitive pattern; accessible focus rings everywhere; keyboard: `↑↓ Enter Del F2`(rename) `/`(search) `Esc`(clear selection); context menu on right-click **and** long-press (mobile); WCAG AA contrast in both themes; touch targets ≥ 40 px.
+Conventions: Tailwind 4 `@theme` tokens for the above; shared primitives in `components/retro/` — `RetroWindow` (beveled frame, gradient title bar, drag-by-title), `RetroButton`/`RetroInput`/`RetroProgress`, `RetroMenu` (context menu), `RetroDialog`/`ConfirmDialog` (replaces native `confirm()`/`prompt()`); keyboard unchanged (`↑↓ Enter Del F2` rename, `/` search, `Esc` clear); context menu on right-click; touch targets ≥ 40 px; WCAG AA contrast throughout.
 
 ### 5.4 Responsive strategy
 
@@ -292,6 +299,7 @@ Controls: Firebase ID-token verification (short TTL ≤1 h — which doubles as 
 | DB | Postgres (Neon/Vercel) | MySQL (9Drive), SQLite/Turso | relational + jsonb + Prisma adapters + marketplace integration; Turso viable fallback |
 | Auth | **Firebase Auth** (owner's choice) | Better Auth, NextAuth (legacy), Clerk, roll-your-own | sign-in only — Google+email/password UX for free, no password/session code in our DB, free tier ample; cost: split identity store (Firebase = who, Postgres = what) + server-side ID-token verification. Better Auth = fallback if self-hosted identity becomes a requirement |
 | ID-token verification | **Keyless**: `jose` + Google's public JWKS (signature + iss/aud/exp/sub per Google's manual checklist); `firebase-admin` dropped 2026-10-20 | `firebase-admin` + service-account JSON (impossible here: org policy `iam.disableServiceAccountKeyCreation`, "secure by default" enforcement); workload-identity federation (overkill — JWT verification fundamentally needs no credential) | no secret to store/rotate, org-policy-proof, much lighter dependency (faster cold starts); **cost accepted: no `checkRevoked`** — sensitive ops (disconnect, purge, key create) are bounded by the token's ≤1 h TTL as revocation bound; revisit only if instant global sign-out becomes a requirement |
+| Visual language | **"Windows 98, modernized", whole app** (owner brief 2026-10-22): teal dithered desktop, beveled silver windows with draggable title bars, navy gradient title bars, Tahoma stack, hand-drawn pixel SVG icons, 120–180 ms motion | the original modern-dark spec (indigo accent, 10 px radius, lucide); CRT/phosphor; Y2K-vaporwave; System 7 (all four were presented; owner chose Win98) | retro file-explorer is the owner's product identity for v1; "modernized" keeps AA contrast, tabular numerals, keyboard affordances and the motion budget so it stays a real tool; cost accepted: no dark/light flip (single world), custom primitives instead of a component library |
 
 ---
 

@@ -297,7 +297,7 @@ CI/CD: GitHub Actions (typecheck+test) → Vercel preview deploy per PR → prod
 | **P0.0 – Spikes** | S1, S2, S5 from §7 + DB port of schema | spike memo in repo; go/no-go on §6 choices |
 | **P0.1 – Foundation** | repo scaffold, Next.js app shell, Firebase Auth (sign-in + token guard), Postgres schema+migrations, crypto vault, provider interface + S3 provider *(S3 part deferred — no MinIO/R2 owner setup exists yet; interface shipped, Drive provider came first)* | sign-in works, connect MinIO/R2 *(Drive connect done instead)*, quota shows |
 | **P0.2 – Google** | Google provider: OAuth connect, resumable upload proxy, Range download proxy, quota sync | real Drive E2E contract test green — ✅ 2026-10-22, 8/8 live (`tests/e2e-drive-contract.test.ts`, `npm run test:e2e`) |
-| **P0.3 – Core UX** | folders/files CRUD, uploader UI w/ resume, trash, search, activity | e2e "flaky mobile upload" passes |
+| **P0.3 – Core UX** | folders/files CRUD, uploader UI w/ resume, trash, search, activity | e2e "flaky mobile upload" passes — ✅ 2026-10-22, 14/14 live (`tests/e2e-drive-contract.test.ts`, `npm run test:e2e`) |
 | **P0.4 – Sharing/API** | shares+preview tokens, public page, API keys, `/api/v1/uploads`, rate limits | revoke test passes |
 | **P0.5 – Jobs+cron** | reconcile, purge, session GC, quota cron, **metadata backup (daily dump → R2)**, health | jobs idempotent **at daily cadence**; dump restores clean in a test DB; dashboard diagnostics |
 | **P0.6 – Harden** | guard tests, load test, docs polish, attribution | all §9 gates green → **v1 ship** |

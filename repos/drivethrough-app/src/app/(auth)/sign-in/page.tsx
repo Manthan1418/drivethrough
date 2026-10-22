@@ -1,11 +1,14 @@
 'use client';
 
-// /sign-in — public entry (design.md §5.1). Google popup + email/password (sign-in / sign-up toggle).
-// Redirects to / once authenticated (RootRedirect decides where authed users land).
+// /sign-in — the retro world starts at the log-on dialog: a Win98 window on the teal
+// desktop (design.md §5.1). Google popup + email/password (sign-in / sign-up toggle).
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/client/auth-context';
+import { RetroButton, RetroInput } from '@/components/retro/controls';
+import { RetroWindow } from '@/components/retro/window';
+import { IconAlert } from '@/components/retro/icons';
 
 type Mode = 'signin' | 'signup';
 // Firebase auth codes → plain messages (design.md §6 spirit: never dump raw codes)
@@ -57,78 +60,83 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-[var(--radius-surface)] border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="text-xl font-semibold">DriveThrough</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          {mode === 'signin' ? 'Sign in to your drives' : 'Create your account'}
-        </p>
+    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-4">
+      {/* desktop flourish */}
+      <p className="select-none text-[13px] font-bold tracking-wide text-white/80 drop-shadow-[1px_1px_0_rgba(0,0,0,0.35)]">
+        ◆ DriveThrough
+      </p>
 
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void run(signInWithGoogle)}
-          className="mt-5 flex h-11 w-full items-center justify-center gap-2 rounded-[var(--radius-control)] border border-zinc-300 bg-white text-sm font-medium hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-750"
-        >
-          <GoogleG />
-          Continue with Google
-        </button>
+      <RetroWindow title="DriveThrough — Log On" draggable className="w-[360px] max-w-full">
+        <div className="space-y-3 p-1">
+          <p className="text-[12px] text-ink-soft">
+            {mode === 'signin' ? 'Sign in to your drives' : 'Create your account'}
+          </p>
 
-        <div className="my-4 flex items-center gap-3 text-xs text-zinc-400">
-          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" /> or <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
+          <RetroButton className="w-full" disabled={busy} onClick={() => void run(signInWithGoogle)}>
+            <GoogleG /> Continue with Google
+          </RetroButton>
+
+          <div className="flex items-center gap-2 text-[11px] text-ink-faint">
+            <span className="bevel-thin-pressed h-px flex-1" /> or <span className="bevel-thin-pressed h-px flex-1" />
+          </div>
+
+          <form onSubmit={onSubmit} className="space-y-2">
+            {mode === 'signup' && (
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-bold">Name</span>
+                <RetroInput placeholder="Optional" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+              </label>
+            )}
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-bold">E-mail</span>
+              <RetroInput
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[12px] font-bold">Password</span>
+              <RetroInput
+                type="password"
+                required
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+              />
+            </label>
+
+            {error && (
+              <p role="alert" className="bevel-thin-raised flex items-start gap-2 bg-[#f8e6e6] p-2 text-[12px] text-danger">
+                <IconAlert size={14} /> {error}
+              </p>
+            )}
+
+            <RetroButton variant="primary" type="submit" className="w-full" disabled={busy}>
+              {busy ? 'One moment…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+            </RetroButton>
+          </form>
+
+          <p className="pt-1 text-center text-[12px] text-ink-soft">
+            {mode === 'signin' ? 'New here?' : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              className="font-bold text-titlebar underline"
+              onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); }}
+            >
+              {mode === 'signin' ? 'Create account' : 'Sign in'}
+            </button>
+          </p>
         </div>
+      </RetroWindow>
 
-        <form onSubmit={onSubmit} className="space-y-3">
-          {mode === 'signup' && (
-            <input
-              className="h-11 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm outline-none focus:border-[var(--color-accent)] dark:border-zinc-700"
-              placeholder="Name (optional)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoComplete="name"
-            />
-          )}
-          <input
-            className="h-11 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm outline-none focus:border-[var(--color-accent)] dark:border-zinc-700"
-            type="email"
-            required
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            autoComplete="email"
-          />
-          <input
-            className="h-11 w-full rounded-[var(--radius-control)] border border-zinc-300 bg-transparent px-3 text-sm outline-none focus:border-[var(--color-accent)] dark:border-zinc-700"
-            type="password"
-            required
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
-          />
-
-          {error && <p className="text-sm text-[var(--color-error)]" role="alert">{error}</p>}
-
-          <button
-            type="submit"
-            disabled={busy}
-            className="h-11 w-full rounded-[var(--radius-control)] bg-[var(--color-accent)] text-sm font-medium text-white hover:bg-[var(--color-accent-hover)] disabled:opacity-60"
-          >
-            {busy ? '…' : mode === 'signin' ? 'Sign in' : 'Create account'}
-          </button>
-        </form>
-
-        <p className="mt-4 text-center text-sm text-zinc-500">
-          {mode === 'signin' ? 'New here?' : 'Already have an account?'}{' '}
-          <button
-            type="button"
-            className="text-[var(--color-accent)] hover:underline"
-            onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); }}
-          >
-            {mode === 'signin' ? 'Create account' : 'Sign in'}
-          </button>
-        </p>
-      </div>
+      <p className="select-none text-center text-[11px] text-white/70">
+        every drive you own · one window
+      </p>
     </main>
   );
 }
@@ -139,7 +147,7 @@ function GoogleG() {
       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
       <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
       <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
-      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 0 0 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
     </svg>
   );
 }

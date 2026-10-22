@@ -47,6 +47,7 @@ export interface FileMeta {
   mimeType: string;
   sizeBytes: string;
   status: FileStatus;
+  deletedAt: string | null; // ISO — set while in trash (restore cascades on it server-side)
   createdAt: string;
   updatedAt: string;
 }
@@ -74,9 +75,10 @@ export interface ApiKey {
 
 // Storage summary (combined pool view)
 export interface StorageSummary {
-  totalBytes: string | null;
+  totalBytes: string | null; // null = any account reports unlimited/unknown
   usedBytes: string;
   availableBytes: string | null;
+  reservedBytes: string; // in-flight upload claims (flow.md §4 reservations)
   accountCount: number;
 }
 

@@ -6,3 +6,4 @@ export * from './errors.js';
 export * from './uploads.js';
 export * from './domain.js';
 export * from './accounts.js';
+export * from './files.js';

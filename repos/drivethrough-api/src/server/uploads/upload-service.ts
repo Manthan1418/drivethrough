@@ -30,6 +30,7 @@ import type {
 } from '@drivethrough/contracts';
 import { AppError } from '../errors';
 import { getDb } from '../db/client';
+import { logAudit } from '../audit';
 import {
   accounts,
   folders,
@@ -609,6 +610,11 @@ export async function completeUpload(userId: string, uploadId: string): Promise<
   }
   if (!fileId) throw new AppError(ErrorCodes.INTERNAL_ERROR, 'complete produced no file row');
 
+  await logAudit(userId, 'upload.complete', 'file', fileId, {
+    name: u.fileName,
+    sizeBytes: u.sizeBytes.toString(),
+    accountId: u.accountId,
+  });
   enqueueQuotaSync(accountId); // rule 5: never inline — runs after the response flushes
   return respond(fileId);
 }

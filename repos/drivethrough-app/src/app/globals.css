@@ -1,32 +1,223 @@
 @import 'tailwindcss';
 
-/* Design tokens — design.md §5.3. Dark default + light via system; single indigo accent. */
+/* ────────────────────────────────────────────────────────────────────────────
+   DriveThrough visual language — "Windows 98, modernized" (design.md §5.3).
+   Owner brief 2026-10-22: retro file explorer, animated, whole app.
+   Modernized means: authentic Win98 geometry (sharp corners, bevels, navy
+   title gradients, teal desktop) rendered with crisp modern type, AA-contrast
+   inks, and buttery 120–180 ms transitions instead of instant repaints.
+   ──────────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --radius-surface: 10px;   /* surfaces */
-  --radius-control: 8px;    /* buttons/inputs */
+  /* desktop */
+  --color-desktop: #0d7b76;           /* classic #008080, nudged for depth */
+  --color-desktop-deep: #0a5f5b;      /* vignette / pattern line */
 
-  --color-accent: #6366f1;      /* indigo-500 — single accent */
-  --color-accent-hover: #4f46e5;
-  --color-free: #22c55e;        /* semantic: free space */
-  --color-reserved: #f59e0b;    /* semantic: reserved */
-  --color-error: #ef4444;       /* semantic: error */
+  /* chrome — window faces */
+  --color-face: #c8c8c8;              /* silver panel (classic #c0c0c0, lifted) */
+  --color-face-hover: #d6d6d6;
+  --color-face-press: #b4b4b4;
+  --color-face-field: #ffffff;        /* sunken field/list face */
 
-  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  /* bevel ramp (outer-dark → mid → light) */
+  --color-bevel-dark: #3d3d3d;
+  --color-bevel-mid: #8a8a8a;
+  --color-bevel-light: #fdfdfd;
 
-  --ease-micro: 150ms ease-out;  /* motion: 120–180 ms ease-out */
+  /* title bars + selection */
+  --color-titlebar: #000080;          /* classic navy */
+  --color-titlebar-end: #1084d0;      /* gradient end */
+  --color-titlebar-dim: #7b7b8f;      /* inactive title */
+  --color-select: #000080;            /* row selection = title-bar navy (authentic) */
+  --color-select-ink: #ffffff;
+
+  /* ink */
+  --color-ink: #141414;               /* near-black, not true black */
+  --color-ink-soft: #4a4a4a;          /* secondary */
+  --color-ink-faint: #6f6f6f;         /* tertiary — still ≥4.5:1 on face */
+
+  /* semantic (status text + quota) */
+  --color-ok: #0f6d0f;
+  --color-warn: #8a5200;
+  --color-danger: #a40000;
+
+  /* type — Tahoma carries the Win98 voice on every platform, degrading gracefully */
+  --font-ui: Tahoma, 'Segoe UI', Verdana, system-ui, sans-serif;
+  --font-mono: 'Courier New', ui-monospace, monospace;
+
+  /* motion — 120–180 ms ease-out everywhere (design.md §5.3 motion token) */
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.3, 1);
 }
 
-/* dark default; light when system asks for it */
 :root {
-  color-scheme: light dark;
+  color-scheme: light; /* the retro world is one world */
 }
 
 html {
-  font-family: var(--font-sans);
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
+  font-size: 14px; /* Win98 density, modernized */
+}
+
+body {
+  color: var(--color-ink);
+  /* teal desktop with a faint 2px dither — the Win98 desktop pattern, abstracted */
+  background-color: var(--color-desktop);
+  background-image:
+    repeating-linear-gradient(45deg, transparent 0 2px, rgb(0 0 0 / 4%) 2px 4px);
+  min-height: 100dvh;
 }
 
 /* tabular numbers for sizes/quota everywhere */
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/* ── bevels ────────────────────────────────────────────────────────────────
+   Pure box-shadow insets — no images, scales with DPR. Three depths cover
+   the whole system: raised (windows/buttons), thin (rows/menus), sunken
+   (fields, lists, progress tracks). */
+
+.bevel-raised {
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-dark),
+    inset 1px 1px 0 0 var(--color-bevel-light),
+    inset -2px -2px 0 0 var(--color-bevel-mid),
+    inset 2px 2px 0 0 var(--color-face);
+}
+
+.bevel-pressed {
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-light),
+    inset 1px 1px 0 0 var(--color-bevel-dark),
+    inset -2px -2px 0 0 var(--color-face),
+    inset 2px 2px 0 0 var(--color-bevel-mid);
+}
+
+.bevel-thin-raised {
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-mid),
+    inset 1px 1px 0 0 var(--color-bevel-light);
+}
+
+.bevel-thin-pressed {
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-light),
+    inset 1px 1px 0 0 var(--color-bevel-mid);
+}
+
+.bevel-sunken {
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-light),
+    inset 1px 1px 0 0 var(--color-bevel-mid),
+    inset -2px -2px 0 0 var(--color-face);
+}
+
+/* dotted focus ring, Win98-style (offset inside the control) */
+.retro-focus:focus-visible {
+  outline: 1px dotted var(--color-ink);
+  outline-offset: -4px;
+}
+
+/* text selection inside the retro world */
+::selection {
+  background: var(--color-select);
+  color: var(--color-select-ink);
+}
+
+/* ── scrollbars: chunky Win98 bars, dithered track ─────────────────────── */
+* {
+  scrollbar-color: var(--color-face) var(--color-bevel-mid);
+  scrollbar-width: thin;
+}
+::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+::-webkit-scrollbar-track {
+  background-color: #c8c8c8;
+  background-image: repeating-conic-gradient(#bdbdbd 0% 25%, #c8c8c8 0% 50%);
+  background-size: 2px 2px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-face);
+  box-shadow:
+    inset -1px -1px 0 0 var(--color-bevel-dark),
+    inset 1px 1px 0 0 var(--color-bevel-light),
+    inset -2px -2px 0 0 var(--color-bevel-mid),
+    inset 2px 2px 0 0 var(--color-face);
+}
+
+/* ── motion ────────────────────────────────────────────────────────────────
+   The "modernized" half of the brief: windows bloom in, menus pop from their
+   corner, progress marches. All 120–180 ms ease-out. */
+
+@keyframes window-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.anim-window {
+  animation: window-in 160ms var(--ease-out-soft) both;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.anim-menu {
+  transform-origin: top left;
+  animation: menu-in 110ms var(--ease-out-soft) both;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.anim-fade {
+  animation: fade-in 140ms var(--ease-out-soft) both;
+}
+
+/* Win95-style marching-blocks marquee for indeterminate progress */
+@keyframes marquee-blocks {
+  from { background-position-x: 0; }
+  to { background-position-x: 16px; }
+}
+.progress-marquee {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--color-select) 0 8px,
+    transparent 8px 16px
+  );
+  animation: marquee-blocks 0.6s linear infinite;
+}
+
+/* title-bar gradient shimmer on the logo window only (subtle, one place) */
+@keyframes title-shine {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.title-shine {
+  background-size: 200% 100%;
+  animation: title-shine 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-window, .anim-menu, .anim-fade, .progress-marquee, .title-shine {
+    animation: none !important;
+  }
+  * {
+    transition-duration: 1ms !important;
+  }
 }
