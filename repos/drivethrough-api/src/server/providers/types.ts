@@ -30,6 +30,9 @@ export interface UploadContext extends ProviderUserContext {
   targetRootFolderId?: string;
   /** Drive resumable session URI (server-held). S3 ignores. */
   sessionUri?: string;
+  /** Drive: id captured from the final chunk's 200 response (uploads.provider_file_id).
+   *  Set for completeUpload/abortUpload — never sent to the client. */
+  providerFileId?: string;
 }
 
 export interface BeginResult {
@@ -75,7 +78,11 @@ export interface StorageProvider {
     index: number,
     range: { start: number; end: number; total: number },
     body: ReadableStream
-  ): Promise<{ committedOffset: bigint }>;
+  ): Promise<{
+    committedOffset: bigint;
+    /** Drive final chunk (200): id of the file Google created. S3: undefined. */
+    providerFileId?: string;
+  }>;
   /** Drive 308 range check; S3 uses DB chunk ledger + ListParts. */
   queryOffset(ctx: UploadContext): Promise<bigint | 'complete' | 'unknown'>;
   completeUpload(ctx: UploadContext): Promise<{ providerFileId: string; name: string; size: bigint }>;
@@ -84,8 +91,10 @@ export interface StorageProvider {
   // read
   /** S3: presigned URL. Drive: null → caller uses openRead proxy. */
   signDownloadUrl(ctx: ProviderUserContext, fileId: string, ttlSeconds: number): Promise<string | null>;
-  /** Drive alt=media Range proxy (passthrough 206). S3 may also implement for preview. */
-  openRead(ctx: ProviderUserContext, fileId: string, range?: { start: number; end?: number }): Promise<ReadHandle>;
+  /** Drive alt=media Range proxy (passthrough 206/416). `rangeHeader` is the RAW client
+   *  `Range` header (e.g. `bytes=1000-` from a <video> element) passed through verbatim —
+   *  parsing/re-serializing would lose suffix and open-ended forms. S3 may also implement. */
+  openRead(ctx: ProviderUserContext, fileId: string, rangeHeader?: string): Promise<ReadHandle>;
 
   // manage
   delete(ctx: ProviderUserContext, fileId: string, soft?: boolean): Promise<void>;

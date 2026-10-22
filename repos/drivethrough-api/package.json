@@ -10,6 +10,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+  "test:e2e": "bash -c 'set -a; . ./.env; set +a; E2E_DRIVE=1 vitest run tests/e2e-drive-contract.test.ts'",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },

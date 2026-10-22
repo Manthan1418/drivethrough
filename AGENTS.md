@@ -20,7 +20,7 @@ Rule of cross-referencing: docs link each other by section — follow links inst
 
 ## Phase status (updated as we go)
 
-**Current phase: P0.0 COMPLETE (2026-10-22) — spikes S1+S2+S5 closed (memo: `spikes/S1-S2-v1.md`), Neon port + production Drive connect verified; next up is P0.2 (Google provider file layer).** The four docs are approved by the owner; the build gate is open. Decisions locked during approval:
+**Current phase: P0.2 COMPLETE (2026-10-22) — Google provider file layer live E2E-green against the real Drive (8/8 contract tests, `npm run test:e2e` in drivethrough-api; upload proxy 4 MB chunks, Range download proxy, quota sync, provider primitives); next up is P0.3 (folders/files CRUD, uploader UI w/ resume, trash, search).** The four docs are approved by the owner; the build gate is open. Decisions locked during approval:
 - **One monorepo** (`github.com/Manthan1418/drivethrough`, amended 2026-10-20 — supersedes the original separate-repos rule): docs at root + `repos/{drivethrough-api, drivethrough-app, drivethrough-contracts}`. Still **two separate Vercel deployments** via per-project Root Directory — deployment separation unchanged, only git hosting merged. Contracts shared as an npm workspace (`"*"`), never a git URL — tech.md §2.
 - Firebase = sign-in only; cross-origin **bearer-token auth, no cookies**.
 - Striping stays **P1** (owner's biggest file fits one account).

@@ -135,6 +135,9 @@ export const uploads = pgTable('uploads', {
   status: uploadStatus('status').notNull().default('initiated'),
   accountId: uuid('account_id').references(() => accounts.id),
   providerSessionUri: text('provider_session_uri'), // Drive resumable URI — server-only, never to client
+  // Drive's final chunk (200) returns the created file's id — captured here so `complete`
+  // can verify the physical file before inserting the files row (byte-total guard).
+  providerFileId: varchar('provider_file_id', { length: 255 }),
   targetRootFolderId: varchar('target_root_folder_id', { length: 255 }),
   stripePlan: jsonb('stripe_plan'), // P1
   error: text('error'),

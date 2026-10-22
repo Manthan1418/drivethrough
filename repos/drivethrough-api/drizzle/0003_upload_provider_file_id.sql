@@ -1,0 +1,1 @@
+ALTER TABLE "uploads" ADD COLUMN "provider_file_id" varchar(255);

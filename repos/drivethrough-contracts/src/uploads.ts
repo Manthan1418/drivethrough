@@ -34,6 +34,12 @@ export const UploadInitResponse = z.object({
 });
 export type UploadInitResponse = z.infer<typeof UploadInitResponse>;
 
+// POST /api/uploads/reserve — the placement call (server reads size from the init row)
+export const UploadReserveRequest = z.object({
+  uploadId: z.string().uuid(),
+});
+export type UploadReserveRequest = z.infer<typeof UploadReserveRequest>;
+
 // POST /api/uploads/reserve → placement result
 export const UploadReserveResponse = z.object({
   uploadId: z.string().uuid(),
@@ -73,3 +79,10 @@ export const UploadCompleteResponse = z.object({
   sizeBytes: z.string().regex(/^\d+$/),
 });
 export type UploadCompleteResponse = z.infer<typeof UploadCompleteResponse>;
+
+// POST /api/uploads/:id/abort (no body — uploadId from the path)
+export const UploadAbortResponse = z.object({
+  uploadId: z.string().uuid(),
+  status: UploadStatus, // 'aborted' — idempotent: aborting twice is fine
+});
+export type UploadAbortResponse = z.infer<typeof UploadAbortResponse>;
