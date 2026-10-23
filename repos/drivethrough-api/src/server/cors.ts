@@ -2,7 +2,11 @@
 // Allows only the frontend origin(s); handles preflight for chunk PUT (Content-Range)
 // and Range downloads. No wildcard, no credentials (bearer auth).
 
-const ALLOWED_METHODS = 'GET, POST, PUT, DELETE, OPTIONS';
+// PATCH is required: rename (files+folders), restore-from-trash, and every other
+// mutable control-plane op sends it. Missing it made the browser block those calls
+// ("Failed to fetch") while direct-API e2e stayed green — caught in a real browser
+// 2026-10-23; guard test exists.
+const ALLOWED_METHODS = 'GET, POST, PUT, PATCH, DELETE, OPTIONS';
 const ALLOWED_HEADERS = 'Authorization, Content-Type, Content-Range, Range, X-Client-Upload-Id';
 const EXPOSED_HEADERS = 'Content-Range, Content-Length, Accept-Ranges';
 

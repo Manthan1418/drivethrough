@@ -40,6 +40,10 @@ export function RetroWindow({
   const onPointerDown = useCallback(
     (e: ReactPointerEvent<HTMLDivElement>) => {
       if (!draggable || e.button !== 0) return;
+      // Never hijack presses on interactive title-bar controls (close X, collapse,
+      // suffix buttons): pointer capture retargets their click event to the title
+      // bar and the button silently stops working.
+      if ((e.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]')) return;
       const origin = pos ?? { x: 0, y: 0 };
       dragRef.current = { startX: e.clientX, startY: e.clientY, originX: origin.x, originY: origin.y };
       e.currentTarget.setPointerCapture(e.pointerId);
@@ -69,7 +73,10 @@ export function RetroWindow({
 
   return (
     <div
-      className={`bevel-raised bg-face anim-window ${className}`}
+      // The entrance animation (`.anim-window`, fill-mode both) keeps its final
+      // keyframe's transform applied and would override the inline drag translate —
+      // so once the window has been dragged, drop the class and let pos win.
+      className={`bevel-raised bg-face ${pos ? '' : 'anim-window'} ${className}`}
       style={pos ? { transform: `translate(${pos.x}px, ${pos.y}px)` } : undefined}
       role="dialog"
       aria-label={title}
@@ -103,8 +110,10 @@ export function RetroWindow({
           </button>
         )}
       </div>
-      {/* body */}
-      <div className="p-2">{children}</div>
+      {/* body — flex-1 + min-h-0 so full-height children (the file browser) can
+          actually fill the window; block layout left a gray void below the list and
+          floated the selection action bar on top of the rows. */}
+      <div className="flex min-h-0 flex-1 flex-col p-2">{children}</div>
       {footer && <div className="flex justify-end gap-2 px-2 pb-2">{footer}</div>}
     </div>
   );

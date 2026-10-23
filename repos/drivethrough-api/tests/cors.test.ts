@@ -46,4 +46,19 @@ describe('CORS allowlist normalization', () => {
     expect(res?.headers.get('Access-Control-Allow-Origin')).toBe('https://a.example.com');
     expect(res?.headers.get('Access-Control-Allow-Headers')).toContain('Authorization');
   });
+
+  // Regression caught in a real browser 2026-10-23: PATCH was missing from the method
+  // allowlist, so every PATCH (rename, restore-from-trash…) preflighted 204 but the
+  // browser then blocked the actual request ("Failed to fetch"). Direct-API e2e stays
+  // green without CORS — this guard is the only thing that pins the full verb list.
+  it('allows every verb the frontend client layer issues, including PATCH', () => {
+    process.env.CORS_ALLOW_ORIGIN = 'https://a.example.com';
+    const res = handlePreflight(
+      new Request('http://x.test/api', { method: 'OPTIONS', headers: { origin: 'https://a.example.com' } })
+    );
+    const methods = res?.headers.get('Access-Control-Allow-Methods') ?? '';
+    for (const m of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+      expect(methods).toContain(m);
+    }
+  });
 });

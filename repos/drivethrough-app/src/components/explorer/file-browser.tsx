@@ -551,7 +551,12 @@ function Row({
     <li
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      onContextMenu={onContextMenu}
+      onContextMenu={(e) => {
+        // the list container also opens the background menu — don't let the
+        // bubbled event overwrite this row's menu
+        e.stopPropagation();
+        onContextMenu(e);
+      }}
       className={`flex h-7 cursor-default items-center gap-2 px-2 text-[13px] transition-colors duration-75 ${
         selected ? 'bg-select text-select-ink' : 'text-ink hover:bg-face-hover'
       }`}

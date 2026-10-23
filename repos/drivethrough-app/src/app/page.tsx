@@ -88,6 +88,12 @@ function Explorer() {
 
   const navigate = useCallback((v: ExplorerView) => {
     setView(v);
+    // clicking "My Files" while inside a folder returns to the root — without this
+    // the button looks dead (the view is already 'files' and the folder never resets)
+    if (v === 'files') {
+      setFolderId(null);
+      setPath([]);
+    }
     setSidebarOpen(false);
   }, []);
 
