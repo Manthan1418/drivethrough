@@ -268,7 +268,9 @@ Minimal: file name, size, mime, provider-agnostic preview (image inline / video 
 | `NO_ACCOUNT_WITH_ENOUGH_SPACE` | placement panel (per-account bars + actions) |
 | `ACCOUNT_NEEDS_REAUTH` | banner on account card + "Reconnect" (Google re-consent) |
 | `UPLOAD_SIZE_MISMATCH` / `CHUNK_OUT_OF_ORDER` | auto-retry once → then "Resume" button |
-| `RATE_LIMITED` | dock note "slowing down…" with retry countdown |
+| `RATE_LIMITED` | dock note "slowing down…" with retry countdown; on the public share page → dead-link card "Too many requests" |
+| `SHARE_NOT_FOUND` / `SHARE_EXPIRED` / `PREVIEW_TOKEN_INVALID` | share page / preview window → dead-link card ("This link has been revoked" / "This link has expired") — same 404 wording for revoked, expired, trashed and purged, so the page leaks nothing about why |
+| `TOKEN_REVOKED` | keys view: the row simply shows "revoked"; scripts get the honest 401 on their next call |
 | `FILE_TOO_LARGE_FOR_PLAN` | explain + options (split / upgrade / direct link) |
 | `UPSTREAM_QUOTA_EXCEEDED` (Google 750 GB/day) | "Account at daily upload limit — retry in X h" with per-account attribution |
 | `UNAUTHENTICATED` | soft redirect preserving return URL |

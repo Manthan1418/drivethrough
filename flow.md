@@ -275,18 +275,23 @@ System      GET/POST /api/system/google-config (9Drive parity: the app's Google 
 Storage     GET /api/storage/summary · GET /api/storage/breakdown
 Folders     GET/POST /api/folders · PATCH/DELETE /api/folders/:id
 Files       GET /api/files · GET/PATCH/DELETE /api/files/:id · POST /api/files/batch
-            POST /api/files/:id/share · DELETE /api/files/:id/share
-            POST /api/files/:id/preview-token · GET /api/files/:id/content · /download-url
-            GET /api/preview/[token] · GET /s/[token] (public page data)
+            GET/POST/DELETE /api/files/:id/share        (GET = live-link count, no tokens ever listed · POST = idempotent create via client UUID, 201 fresh / 200 replay with token null, raw `dsh_` token returned ONCE · DELETE = revoke ALL live links, idempotent `{revoked:n}`)
+            POST /api/files/:id/preview-token           (mints a 10-min `dtp_` capability for in-app preview)
+            GET /api/files/:id/content · /download-url
+Public      GET /api/shares/:token                      (share metadata only: name/size/mime/role/expiry — no account/folder internals; 404 SHARE_NOT_FOUND when revoked/expired/trashed/purged)
+            GET /api/preview/:token?download=1          (ONE content route, two issuers — preview AND share tokens resolve through the same permission resolver, so revoke lands on the very next request; Range streaming, 404 PREVIEW_TOKEN_INVALID on a dead token)
 Uploads     POST /api/uploads/init · POST /api/uploads/reserve
             PUT  /api/uploads/chunk/:id · GET /api/uploads/:id
             POST /api/uploads/:id/complete · POST /api/uploads/:id/abort
-Keys        GET/POST /api/keys · DELETE /api/keys/:id
-Public API  POST /api/v1/uploads (API-key auth, same chunk protocol)
+Keys        GET/POST /api/keys · DELETE /api/keys/:id   (POST returns the raw `dtk_…` secret ONCE — the list serves key_prefix only; DELETE is the revoke, next key-authenticated call → 401 TOKEN_REVOKED)
+Public API  POST /api/v1/uploads (API-key auth ONLY — a session bearer is rejected 401; init+reserve folded into one call)
+            GET /api/v1/uploads/:id · PUT /api/v1/uploads/:id/chunk · POST /api/v1/uploads/:id/complete · POST /api/v1/uploads/:id/abort  (mirror of the internal protocol, same no-buffer streaming)
 Activity    GET /api/activity
 ```
 
-Errors: stable JSON `{ code, message }` (9Drive convention kept), e.g. `NO_ACCOUNT_WITH_ENOUGH_SPACE`, `UPLOAD_SIZE_MISMATCH`, `ACCOUNT_NEEDS_REAUTH`.
+Rate limits (in-Postgres fixed-window `rate_limits`, atomic upsert — serverless-safe, no memory counters; `clientIp` = first `x-forwarded-for` entry): auth endpoints 10/min/IP (checked BEFORE token verification), share metadata 60/min/IP, preview content 300/min/IP, internal chunk 600/min/user, `/api/v1` 600/min/key. Over-limit → 429 `RATE_LIMITED`.
+
+Errors: stable JSON `{ code, message }` (9Drive convention kept), e.g. `NO_ACCOUNT_WITH_ENOUGH_SPACE`, `UPLOAD_SIZE_MISMATCH`, `ACCOUNT_NEEDS_REAUTH`, `SHARE_NOT_FOUND`, `SHARE_EXPIRED`, `PREVIEW_TOKEN_INVALID`, `TOKEN_REVOKED`, `RATE_LIMITED`.
 
 ---
 

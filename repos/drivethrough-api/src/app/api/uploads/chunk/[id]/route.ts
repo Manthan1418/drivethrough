@@ -9,6 +9,7 @@ import { ErrorCodes } from '@drivethrough/contracts';
 import { requireDbUser } from '@/server/auth/db-user';
 import { handlePreflight, withCors } from '@/server/cors';
 import { AppError, toApiError } from '@/server/errors';
+import { rateLimit } from '@/server/ratelimit';
 import { putUploadChunk } from '@/server/uploads/upload-service';
 
 export const maxDuration = 60; // spike S2: 4 MB chunk ≈ 1–3 s round trip
@@ -20,6 +21,7 @@ export async function OPTIONS(req: NextRequest) {
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { userId } = await requireDbUser(req);
+    await rateLimit(`ck:${userId}`, 600); // sustained-friendly bound: 600/min/user ≈ 10 × 4 MB/s (tech.md §4)
     const { id } = await ctx.params;
     if (!req.body) {
       throw new AppError(ErrorCodes.VALIDATION_FAILED, 'empty chunk body');

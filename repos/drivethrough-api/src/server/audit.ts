@@ -5,7 +5,7 @@
 import { getDb } from './db/client';
 import { auditLogs } from './db/schema';
 
-export type AuditEntityType = 'folder' | 'file' | 'account' | 'upload' | 'key';
+export type AuditEntityType = 'folder' | 'file' | 'account' | 'upload' | 'key' | 'share';
 
 export async function logAudit(
   userId: string,

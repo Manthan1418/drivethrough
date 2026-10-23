@@ -7,7 +7,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { listActivity } from '@/client/files';
 import { RetroButton } from '@/components/retro/controls';
 import {
-  IconAlert, IconFile, IconFolder, IconRestore, IconTrash, IconUpload,
+  IconAlert, IconFile, IconFolder, IconKey, IconRestore, IconShare, IconTrash, IconUpload,
 } from '@/components/retro/icons';
 import type { ActivityEvent } from '@drivethrough/contracts';
 
@@ -25,6 +25,10 @@ const VERB: Record<string, { text: (e: ActivityEvent) => string; icon: React.Rea
   'folder.restore': { text: (e) => `Restored folder “${nameOf(e)}”`, icon: <IconRestore size={14} /> },
   'folder.delete': { text: (e) => `Permanently deleted folder “${nameOf(e)}”`, icon: <IconTrash size={14} /> },
   'folder.batch.delete': { text: (e) => `Bulk action: ${metaOf(e, 'op')}`, icon: <IconTrash size={14} /> },
+  'share.create': { text: (e) => `Created a share link for “${nameOf(e)}”`, icon: <IconShare size={14} /> },
+  'share.revoke': { text: () => 'Revoked share link(s)', icon: <IconShare size={14} /> },
+  'key.create': { text: (e) => `Created API key “${metaOf(e, 'name')}”`, icon: <IconKey size={14} /> },
+  'key.revoke': { text: () => 'Revoked an API key', icon: <IconKey size={14} /> },
 };
 
 function nameOf(e: ActivityEvent): string {

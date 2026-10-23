@@ -63,3 +63,11 @@ export async function apiRaw(path: string, init: RequestInit = {}): Promise<Resp
   if (tok) h.set('Authorization', `Bearer ${tok}`);
   return fetch(`${API_URL}${path}`, { ...init, headers: h });
 }
+
+/** Absolute URL for a backend path — for capability URLs that a media element fetches
+ *  directly (<img src>, <video src>, share-page downloads): no Authorization header can
+ *  ride along, the token in the URL IS the credential. Origin derivation still lives only
+ *  here, so this file remains the single network choke-point. */
+export function apiUrl(path: string): string {
+  return `${API_URL}${path}`;
+}

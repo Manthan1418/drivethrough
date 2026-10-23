@@ -7,3 +7,5 @@ export * from './uploads.js';
 export * from './domain.js';
 export * from './accounts.js';
 export * from './files.js';
+export * from './shares.js';
+export * from './keys.js';

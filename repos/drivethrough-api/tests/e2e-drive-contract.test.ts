@@ -18,6 +18,9 @@
 //   308 cross-check · committed-chunk replay without re-forward · complete idempotency
 //   via the unique index · reservation release · sha256-exact download · Range 206 ·
 //   provider.listChildren reconciliation · soft(trash)/hard delete · post-write quota sync.
+// P0.4: preview-token mint → unauthenticated Range stream · share create/revoke
+//   (public reader dies 404 within seconds — the "revoke test" exit gate) ·
+//   API key shown once → /api/v1 upload → revoke 401 · auth-endpoint rate limit.
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -41,9 +44,21 @@ import { GET as getFileRoute, PATCH as patchFile, DELETE as deleteFileRoute } fr
 import { POST as postBatch } from '../src/app/api/files/batch/route';
 import { GET as getActivity } from '../src/app/api/activity/route';
 import { GET as getSummaryRoute } from '../src/app/api/storage/summary/route';
+// P0.4 — shares, preview tokens, API keys, external /api/v1 uploads, rate limits
+import { GET as getShareStateRoute, POST as postShare, DELETE as deleteShareRoute } from '../src/app/api/files/[id]/share/route';
+import { POST as postPreviewToken } from '../src/app/api/files/[id]/preview-token/route';
+import { GET as getPublicShareRoute } from '../src/app/api/shares/[token]/route';
+import { GET as getPublicPreviewRoute } from '../src/app/api/preview/[token]/route';
+import { GET as listKeysRoute, POST as postKeyRoute } from '../src/app/api/keys/route';
+import { DELETE as deleteKeyRoute } from '../src/app/api/keys/[id]/route';
+import { POST as v1PostUploads } from '../src/app/api/v1/uploads/route';
+import { GET as v1GetUpload } from '../src/app/api/v1/uploads/[id]/route';
+import { PUT as v1PutChunk } from '../src/app/api/v1/uploads/[id]/chunk/route';
+import { POST as v1PostComplete } from '../src/app/api/v1/uploads/[id]/complete/route';
+import { GET as googleStartRoute } from '../src/app/api/accounts/google/start/route';
 
 import { getDb } from '../src/server/db/client';
-import { accounts, storageUsage, users, files, folders, uploads, uploadChunks, reservations, auditLogs } from '../src/server/db/schema';
+import { accounts, storageUsage, users, files, folders, uploads, uploadChunks, reservations, auditLogs, shares, previewTokens, apiKeys, rateLimits } from '../src/server/db/schema';
 import { decryptSecret, encryptSecret } from '../src/server/crypto/vault';
 import { googleDriveProvider } from '../src/server/providers/google-drive';
 import { loadProviderAccount } from '../src/server/accounts/account-context';
@@ -192,10 +207,17 @@ describe.runIf(RUN)('Drive E2E contract (real Drive + real Neon)', () => {
         await db.delete(files).where(eq(files.userId, userId));
         await db.delete(folders).where(eq(folders.userId, userId));
         await db.delete(auditLogs).where(eq(auditLogs.userId, userId)); // keep Neon tidy
+        // api_keys hang off the (persisted) user row — no cascade path, sweep explicitly.
+        // shares/preview_tokens cascade away with the files rows above (FK onDelete cascade).
+        await db.delete(apiKeys).where(eq(apiKeys.userId, userId));
       }
       if (shadowAccountId) {
         await db.delete(storageUsage).where(eq(storageUsage.accountId, shadowAccountId));
         await db.delete(accounts).where(eq(accounts.id, shadowAccountId));
+      }
+      // rate-limit buckets this suite created in-process (clientIp = 'unknown' locally)
+      for (const b of ['unknown', 'pv:unknown', 'shm:unknown', 'auth:unknown']) {
+        await db.delete(rateLimits).where(eq(rateLimits.bucket, b));
       }
     } catch (e) {
       console.warn('[e2e-cleanup] DB delete:', e instanceof Error ? e.message : e);
@@ -671,6 +693,317 @@ describe.runIf(RUN)('Drive E2E contract (real Drive + real Neon)', () => {
       expect(sum.summary.accountCount).toBeGreaterThanOrEqual(1);
       expect(sum.summary.usedBytes).toMatch(/^\d+$/);
       expect(sum.summary.reservedBytes).toMatch(/^\d+$/);
+    },
+    30_000
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // P0.4 — Sharing & API keys (tech.md §12). THE EXIT GATES ("revoke test"):
+  //  1. a share link serves an UNAUTHENTICATED reader, then dies within seconds
+  //     of revoke (404 — flow.md §10.5/§10.6, prd.md §216 ≤ 60 s);
+  //  2. an API key uploads through /api/v1 and 401s the moment it's revoked;
+  //  3. auth endpoints rate-limit per IP (10/min).
+  // Fixture: a small fresh file — the P0.2 file's Drive bytes were hard-deleted
+  // by the provider-primitives test above, so sharing it would 404 at stream time.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const tctx = (token: string) => ({ params: Promise.resolve({ token }) });
+  const keyHeaders = (k: string) => ({ Authorization: `Bearer ${k}` });
+  const P4_SIZE = 100_000;
+  const p4Name = `share-fixture-${Date.now()}.bin`;
+  const p4Payload = randomBytes(P4_SIZE);
+  const p4Sha = createHash('sha256').update(p4Payload).digest('hex');
+  let p4FileId = '';
+
+  it(
+    'p0.4 fixture: uploads a small file through the internal path',
+    async () => {
+      const init = await json(
+        await postInit(
+          authed('/uploads/init', jsonBody({
+            clientUploadId: randomUUID(),
+            fileName: p4Name,
+            mimeType: 'application/octet-stream',
+            sizeBytes: String(P4_SIZE),
+          }))
+        )
+      );
+      const sid = init.uploadId as string;
+      expect((await postReserve(authed('/uploads/reserve', jsonBody({ uploadId: sid })))).status).toBe(200);
+      const c0 = await putChunkRoute(
+        new NextRequest(`${API_BASE}/uploads/chunk/${sid}?index=0`, {
+          method: 'PUT',
+          headers: { ...bearerHeaders(), 'Content-Range': `bytes 0-${P4_SIZE - 1}/${P4_SIZE}` },
+          body: p4Payload,
+        }),
+        { params: Promise.resolve({ id: sid }) }
+      );
+      expect(c0.status).toBe(200);
+      const done = await json(await postComplete(authed(`/uploads/${sid}/complete`, { method: 'POST' }), { params: Promise.resolve({ id: sid }) }));
+      p4FileId = done.fileId as string;
+      expect(p4FileId).toMatch(/^[0-9a-f-]{36}$/);
+    },
+    120_000
+  );
+
+  it(
+    'p0.4 preview token: mint → unauthenticated Range stream with exact bytes → dead tokens 404',
+    async () => {
+      const mintRes = await postPreviewToken(authed(`/files/${p4FileId}/preview-token`, { method: 'POST' }), fctx(p4FileId));
+      expect(mintRes.status).toBe(201);
+      const minted = (await json(mintRes)) as { token: string; expiresAt: string };
+      expect(minted.token.startsWith('dtp_')).toBe(true);
+      const ttl = new Date(minted.expiresAt).getTime() - Date.now();
+      expect(ttl).toBeGreaterThan(9 * 60_000); // design §3.3: 10-min TTL
+      expect(ttl).toBeLessThan(11 * 60_000);
+
+      // hashed at rest: the row holds a 64-hex digest, never the raw token
+      const [row] = await db.select().from(previewTokens).where(eq(previewTokens.fileId, p4FileId)).limit(1);
+      expect(row).toBeDefined();
+      expect(row!.tokenHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(row!.tokenHash).not.toContain(minted.token);
+
+      // NO Authorization below this line — the token in the URL is the capability
+      const full = await getPublicPreviewRoute(new NextRequest(`${API_BASE}/preview/${minted.token}`), tctx(minted.token));
+      expect(full.status).toBe(200);
+      const bytes = new Uint8Array(await full.arrayBuffer());
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(p4Sha);
+      expect(full.headers.get('cache-control')).toBe('private, no-store');
+
+      const win = await getPublicPreviewRoute(
+        new NextRequest(`${API_BASE}/preview/${minted.token}`, { headers: { Range: 'bytes=0-99' } }),
+        tctx(minted.token)
+      );
+      expect(win.status).toBe(206);
+      expect(win.headers.get('content-range')).toBe(`bytes 0-99/${P4_SIZE}`);
+
+      // ?download=1 → native download semantics (RFC 6266 attachment)
+      const dl = await getPublicPreviewRoute(new NextRequest(`${API_BASE}/preview/${minted.token}?download=1`), tctx(minted.token));
+      expect(dl.headers.get('content-disposition')).toContain('attachment;');
+      expect(dl.headers.get('content-disposition')).toContain(p4Name);
+
+      // unknown token → honest 404, no oracle on which table it almost belongs to
+      const bogus = await getPublicPreviewRoute(new NextRequest(`${API_BASE}/preview/dtp_deadbeef`), tctx('dtp_deadbeef'));
+      expect(bogus.status).toBe(404);
+      expect((await json(bogus)).code).toBe('PREVIEW_TOKEN_INVALID');
+    },
+    120_000
+  );
+
+  it(
+    'p0.4 share + revoke: public reader works unauthenticated, dies 404 within seconds (THE EXIT GATE)',
+    async () => {
+      // past expiry is refused up front (400 VALIDATION_FAILED, never a dead-on-arrival link)
+      const past = await postShare(
+        authed(`/files/${p4FileId}/share`, jsonBody({ expiresAt: new Date(Date.now() - 1000).toISOString() })),
+        fctx(p4FileId)
+      );
+      expect(past.status).toBe(400);
+      expect((await json(past)).code).toBe('VALIDATION_FAILED');
+
+      // idempotent create keyed on a client UUID (G6): first insert 201 + raw token,
+      // replay 200 + token null (the raw value is unrecoverable — hashed at rest)
+      const clientId = randomUUID();
+      const expiresAt = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      const firstRes = await postShare(authed(`/files/${p4FileId}/share`, jsonBody({ id: clientId, expiresAt })), fctx(p4FileId));
+      expect(firstRes.status).toBe(201);
+      const first = (await json(firstRes)) as { share: { id: string; token: string | null; role: string; expiresAt: string | null } };
+      expect(first.share.token).toMatch(/^dsh_/);
+      expect(first.share.role).toBe('viewer'); // L6 fix: the enum physically has no writer
+      expect(first.share.expiresAt).toBe(expiresAt);
+      const shareToken = first.share.token!;
+
+      const replayRes = await postShare(authed(`/files/${p4FileId}/share`, jsonBody({ id: clientId, expiresAt })), fctx(p4FileId));
+      expect(replayRes.status).toBe(200);
+      const replay = (await json(replayRes)) as { share: { id: string; token: string | null } };
+      expect(replay.share.id).toBe(first.share.id); // same row — no forked link
+      expect(replay.share.token).toBeNull();
+
+      // live-link state for the dialog: one link, no token material
+      const state = (await json(await getShareStateRoute(authed(`/files/${p4FileId}/share`), fctx(p4FileId)))) as {
+        shares: { id: string; expiresAt: string | null }[];
+      };
+      expect(state.shares).toHaveLength(1);
+      expect(state.shares[0]!.id).toBe(first.share.id);
+      expect(state.shares[0]!.expiresAt).toBe(expiresAt);
+
+      // PUBLIC reader (no auth anywhere): metadata is minimal + uncacheable
+      const meta = await getPublicShareRoute(new NextRequest(`${API_BASE}/shares/${shareToken}`), tctx(shareToken));
+      expect(meta.status).toBe(200);
+      const view = (await json(meta)) as { share: { name: string; sizeBytes: string; mimeType: string; role: string } };
+      expect(view.share.name).toBe(p4Name);
+      expect(view.share.sizeBytes).toBe(String(P4_SIZE));
+      expect(view.share.role).toBe('viewer');
+      expect(meta.headers.get('cache-control') ?? '').toContain('no-store');
+
+      // …and the same token streams the real bytes through the shared read path
+      const pub = await getPublicPreviewRoute(new NextRequest(`${API_BASE}/preview/${shareToken}`), tctx(shareToken));
+      expect(pub.status).toBe(200);
+      expect(createHash('sha256').update(new Uint8Array(await pub.arrayBuffer())).digest('hex')).toBe(p4Sha);
+
+      // REVOKE — the public side 404s on the very next request (≤ 60 s, prd §216)
+      const rev = (await json(
+        await deleteShareRoute(authed(`/files/${p4FileId}/share`, { method: 'DELETE', headers: bearerHeaders() }), fctx(p4FileId))
+      )) as { revoked: number };
+      expect(rev.revoked).toBe(1);
+      const afterMeta = await getPublicShareRoute(new NextRequest(`${API_BASE}/shares/${shareToken}`), tctx(shareToken));
+      expect(afterMeta.status).toBe(404);
+      expect((await json(afterMeta)).code).toBe('SHARE_NOT_FOUND');
+      const afterPub = await getPublicPreviewRoute(new NextRequest(`${API_BASE}/preview/${shareToken}`), tctx(shareToken));
+      expect(afterPub.status).toBe(404); // content dies with metadata — no zombie stream
+
+      // second revoke is idempotent: honest 0, no error
+      const rev2 = (await json(
+        await deleteShareRoute(authed(`/files/${p4FileId}/share`, { method: 'DELETE', headers: bearerHeaders() }), fctx(p4FileId))
+      )) as { revoked: number };
+      expect(rev2.revoked).toBe(0);
+
+      // a TRASHED file's link looks dead too — and no existence leak either way
+      const second = (await json(await postShare(authed(`/files/${p4FileId}/share`, jsonBody({})), fctx(p4FileId)))) as {
+        share: { token: string | null };
+      };
+      expect(second.share.token).toMatch(/^dsh_/);
+      expect((await patchFile(authed(`/files/${p4FileId}`, patchBody({ trashed: true })), fctx(p4FileId))).status).toBe(200);
+      const hidden = await getPublicShareRoute(new NextRequest(`${API_BASE}/shares/${second.share.token}`), tctx(second.share.token!));
+      expect(hidden.status).toBe(404);
+      expect((await patchFile(authed(`/files/${p4FileId}`, patchBody({ trashed: false })), fctx(p4FileId))).status).toBe(200);
+    },
+    120_000
+  );
+
+  it(
+    'p0.4 api keys + /api/v1: secret shown once → key upload lands in Drive → revoke 401s (THE EXIT GATE)',
+    async () => {
+      // create — the full secret appears in THIS response only
+      const createRes = await postKeyRoute(authed('/keys', jsonBody({ name: `e2e-key-${Date.now()}` })));
+      expect(createRes.status).toBe(201);
+      const created = (await json(createRes)) as {
+        key: { id: string; keyPrefix: string; key: string; scopes: string[]; lastUsedAt: string | null; revokedAt: string | null };
+      };
+      const rawKey = created.key.key;
+      expect(rawKey.startsWith('dtk_')).toBe(true);
+      expect(created.key.keyPrefix).toHaveLength(12);
+      expect(created.key.scopes).toContain('uploads:write');
+      expect(created.key.revokedAt).toBeNull();
+
+      // list: prefix only — the secret is never served again
+      const list = (await json(await listKeysRoute(authed('/keys')))) as {
+        keys: { id: string; key?: string; keyPrefix: string }[];
+      };
+      const mine = list.keys.find((k) => k.id === created.key.id);
+      expect(mine).toBeDefined();
+      expect(mine!.key).toBeUndefined();
+      expect(mine!.keyPrefix).toBe(created.key.keyPrefix);
+
+      // v1 refuses a SESSION bearer — the public contract is key-authenticated
+      const sessionReject = await v1PostUploads(
+        authed('/v1/uploads', jsonBody({ clientUploadId: randomUUID(), fileName: 'x.bin', mimeType: 'application/octet-stream', sizeBytes: '1' }))
+      );
+      expect(sessionReject.status).toBe(401);
+      expect((await json(sessionReject)).code).toBe('UNAUTHENTICATED');
+
+      // v1 create: init + placement in ONE key-authenticated call
+      const V1_SIZE = 50_000;
+      const v1Payload = randomBytes(V1_SIZE);
+      const initRes = await v1PostUploads(
+        new NextRequest(`${API_BASE}/v1/uploads`, {
+          method: 'POST',
+          headers: { ...keyHeaders(rawKey), 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            clientUploadId: randomUUID(),
+            fileName: `v1-${Date.now()}.bin`,
+            mimeType: 'application/octet-stream',
+            sizeBytes: String(V1_SIZE),
+          }),
+        })
+      );
+      expect(initRes.status).toBe(201);
+      const v1init = (await json(initRes)) as { uploadId: string; chunkSize: number; totalChunks: number; status: string; accountId: string };
+      expect(v1init.chunkSize).toBe(CHUNK);
+      expect(v1init.totalChunks).toBe(1);
+      expect(v1init.status).toBe('uploading'); // reserve folded into create
+      expect(v1init.accountId).toBe(shadowAccountId); // only account in the pool
+
+      // chunk: SAME no-buffer protocol (raw body + Content-Range), key auth
+      const chunkRes = await v1PutChunk(
+        new NextRequest(`${API_BASE}/v1/uploads/${v1init.uploadId}/chunk?index=0`, {
+          method: 'PUT',
+          headers: { ...keyHeaders(rawKey), 'Content-Range': `bytes 0-${V1_SIZE - 1}/${V1_SIZE}` },
+          body: v1Payload,
+        }),
+        { params: Promise.resolve({ id: v1init.uploadId }) }
+      );
+      expect(chunkRes.status).toBe(200);
+      expect((await json(chunkRes)).committedOffset).toBe(String(V1_SIZE));
+
+      // resume state through the key
+      const state = (await json(
+        await v1GetUpload(new NextRequest(`${API_BASE}/v1/uploads/${v1init.uploadId}`, { headers: keyHeaders(rawKey) }), {
+          params: Promise.resolve({ id: v1init.uploadId }),
+        })
+      )) as { committedOffset: string };
+      expect(state.committedOffset).toBe(String(V1_SIZE));
+
+      // complete → a real file, byte-exact through the app's own read path
+      const done = (await json(
+        await v1PostComplete(new NextRequest(`${API_BASE}/v1/uploads/${v1init.uploadId}/complete`, { method: 'POST', headers: keyHeaders(rawKey) }), {
+          params: Promise.resolve({ id: v1init.uploadId }),
+        })
+      )) as { fileId: string; sizeBytes: string };
+      expect(done.fileId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(done.sizeBytes).toBe(String(V1_SIZE));
+      const dl = await getContent(authed(`/files/${done.fileId}/content`), { params: Promise.resolve({ id: done.fileId }) });
+      expect(dl.status).toBe(200);
+      expect(createHash('sha256').update(new Uint8Array(await dl.arrayBuffer())).digest('hex')).toBe(
+        createHash('sha256').update(v1Payload).digest('hex')
+      );
+
+      // last-used recorded (flow §10.6: the key shows activity)
+      const after = (await json(await listKeysRoute(authed('/keys')))) as { keys: { id: string; lastUsedAt: string | null }[] };
+      expect(after.keys.find((k) => k.id === created.key.id)!.lastUsedAt).not.toBeNull();
+
+      // REVOKE → the next v1 call with that key 401s immediately (TOKEN_REVOKED)
+      const keyCtx = { params: Promise.resolve({ id: created.key.id }) };
+      expect((await deleteKeyRoute(authed(`/keys/${created.key.id}`, { method: 'DELETE', headers: bearerHeaders() }), keyCtx)).status).toBe(200);
+      const dead = await v1GetUpload(new NextRequest(`${API_BASE}/v1/uploads/${v1init.uploadId}`, { headers: keyHeaders(rawKey) }), {
+        params: Promise.resolve({ id: v1init.uploadId }),
+      });
+      expect(dead.status).toBe(401);
+      expect((await json(dead)).code).toBe('TOKEN_REVOKED');
+
+      // double revoke stays idempotent
+      expect((await deleteKeyRoute(authed(`/keys/${created.key.id}`, { method: 'DELETE', headers: bearerHeaders() }), keyCtx)).status).toBe(200);
+
+      // audit: every P0.4 sensitive action landed in the trail (design §7)
+      const act = (await json(await getActivity(authed('/activity')))) as { events: { action: string }[] };
+      const actions = act.events.map((e) => e.action);
+      for (const expected of ['key.create', 'key.revoke', 'share.create', 'share.revoke']) {
+        expect(actions, `audit trail should contain ${expected}`).toContain(expected);
+      }
+    },
+    300_000
+  );
+
+  it(
+    'p0.4 rate limit: auth endpoints answer 429 after 10 hits/min per IP, before auth',
+    async () => {
+      // unauthenticated on purpose: the limiter sits BEFORE token verification (tech.md §4),
+      // so abuse never burns JWKS lookups either — local runs share the `unknown` IP bucket,
+      // which only makes an exhausted bucket MORE likely, never less (assertions tolerate both)
+      let saw429 = false;
+      let passes = 0;
+      for (let i = 0; i < 11; i++) {
+        const res = await googleStartRoute(new NextRequest(`${API_BASE}/accounts/google/start`));
+        if (res.status === 429) {
+          saw429 = true;
+          expect((await json(res)).code).toBe('RATE_LIMITED');
+        } else {
+          passes += 1;
+          expect(res.status).toBe(401); // auth still enforced inside the window
+        }
+      }
+      expect(passes).toBeLessThanOrEqual(10);
+      expect(saw429, '11th request in the same minute should be rate limited').toBe(true);
     },
     30_000
   );

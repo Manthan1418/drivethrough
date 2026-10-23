@@ -1,11 +1,21 @@
 'use client';
 
-// PreviewWindow — double-clicking a file opens it in a small retro window (blob via the
-// Range-capable content proxy). Sizes are honest about v1: the blob lives in browser
-// memory for the preview's lifetime; big-file streaming polish comes with striping (P1).
+// PreviewWindow — double-clicking a file opens it in a small retro window.
+//
+// P0.4 change: bytes now arrive through a short-lived PREVIEW TOKEN URL (flow.md §5.2 —
+// "img/video/PDF/text uses same endpoint with short-lived preview token") instead of an
+// authed whole-file blob. That means:
+//  • <video>/<img> fetch directly with Range support — a multi-GB file previews in a
+//    bounded window instead of being buffered entirely into JS memory;
+//  • no Authorization header can ride a media element — the token in the URL IS the
+//    credential (10-minute TTL, hashed server-side);
+//  • if the token expires mid-playback the media element errors → we re-mint a fresh
+//    token and resume from the same position (the URL changes, playback continues).
+// "Save to disk" keeps the authenticated full-fetch path (it must produce a file, not a tab).
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRaw } from '@/client/api';
+import { capabilityUrl, mintPreviewToken } from '@/client/shares';
 import { humanBytes, type UploadTask } from '@/client/uploads';
 import { RetroButton } from '@/components/retro/controls';
 import { RetroWindow } from '@/components/retro/window';
@@ -32,29 +42,34 @@ export function PreviewWindow({ file, onClose }: { file: FileMeta; onClose: () =
   const [state, setState] = useState<PreviewState>('loading');
   const [url, setUrl] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
-  const urlRef = useRef<string | null>(null);
+  const mediaRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  const resumeAt = useRef<number | null>(null); // playback position to restore after re-mint
+
+  const load = useCallback(async () => {
+    setState('loading');
+    try {
+      const minted = await mintPreviewToken(file.id);
+      setUrl(capabilityUrl(minted.token));
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  }, [file.id]);
 
   useEffect(() => {
-    let alive = true;
-    void (async () => {
-      try {
-        const res = await apiRaw(`/api/files/${file.id}/content`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const blob = await res.blob();
-        if (!alive) { URL.revokeObjectURL(URL.createObjectURL(blob)); return; }
-        const objectUrl = URL.createObjectURL(blob);
-        urlRef.current = objectUrl;
-        setUrl(objectUrl);
-        setState('ready');
-      } catch {
-        if (alive) setState('error');
-      }
-    })();
-    return () => {
-      alive = false;
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    };
-  }, [file.id]);
+    void load();
+    resumeAt.current = null;
+  }, [load]);
+
+  // Token TTL (10 min) can outlive a long playback — the media element's error means the
+  // URL went stale: mint a fresh one and continue where we were.
+  const recover = useCallback(() => {
+    const el = mediaRef.current;
+    if (el && Number.isFinite(el.currentTime) && el.currentTime > 0.5) {
+      resumeAt.current = el.currentTime;
+    }
+    void load();
+  }, [load]);
 
   const kind = fileKindOf(file.mimeType);
 
@@ -80,13 +95,42 @@ export function PreviewWindow({ file, onClose }: { file: FileMeta; onClose: () =
     >
       <div className="bevel-sunken flex max-h-[60vh] min-h-[180px] items-center justify-center overflow-auto bg-face-field p-2">
         {state === 'loading' && <p className="text-[12px] text-ink-soft">Fetching from your drive…</p>}
-        {state === 'error' && <p className="text-[12px] text-danger">Could not load this file.</p>}
+        {state === 'error' && (
+          <div className="text-center">
+            <p className="text-[12px] text-danger">Could not load this file.</p>
+            <p className="mt-1 text-[11px] text-ink-soft">The preview link may have expired.</p>
+            <RetroButton small className="mt-2" onClick={() => void load()}>Try again</RetroButton>
+          </div>
+        )}
         {state === 'ready' && url && kind === 'image' && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={url} alt={file.name} className="max-h-[56vh] object-contain" />
         )}
-        {state === 'ready' && url && kind === 'video' && <video src={url} controls className="max-h-[56vh] w-full" />}
-        {state === 'ready' && url && kind === 'audio' && <audio src={url} controls className="w-full" />}
+        {state === 'ready' && url && kind === 'video' && (
+          <video
+            ref={mediaRef as React.RefObject<HTMLVideoElement>}
+            src={url}
+            controls
+            className="max-h-[56vh] w-full"
+            onError={recover}
+            onLoadedMetadata={() => {
+              const el = mediaRef.current;
+              if (el && resumeAt.current !== null) {
+                el.currentTime = resumeAt.current;
+                resumeAt.current = null;
+              }
+            }}
+          />
+        )}
+        {state === 'ready' && url && kind === 'audio' && (
+          <audio
+            ref={mediaRef as React.RefObject<HTMLAudioElement>}
+            src={url}
+            controls
+            className="w-full"
+            onError={recover}
+          />
+        )}
         {state === 'ready' && url && kind === 'pdf' && <iframe src={url} title={file.name} className="h-[56vh] w-full border-0" />}
         {state === 'ready' && url && kind === 'text' && <TextPreview url={url} />}
         {state === 'ready' && url && kind === 'other' && (
@@ -109,7 +153,7 @@ function TextPreview({ url }: { url: string }) {
   const [text, setText] = useState<string>('…');
   useEffect(() => {
     void fetch(url)
-      .then((r) => r.text())
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((t) => setText(t.slice(0, 200_000)))
       .catch(() => setText('(could not read text)'));
   }, [url]);
@@ -118,7 +162,8 @@ function TextPreview({ url }: { url: string }) {
   );
 }
 
-function fileKindOf(mime: string): 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'other' {
+/** Shared with the public /s/[token] page — one definition of "what can preview". */
+export function fileKindOf(mime: string): 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'other' {
   const m = mime.toLowerCase();
   if (m.startsWith('image/')) return 'image';
   if (m.startsWith('video/')) return 'video';

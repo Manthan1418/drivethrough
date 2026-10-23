@@ -30,6 +30,7 @@ export const ErrorCodes = {
   // shares / keys
   SHARE_NOT_FOUND: 'SHARE_NOT_FOUND',
   SHARE_EXPIRED: 'SHARE_EXPIRED',
+  PREVIEW_TOKEN_INVALID: 'PREVIEW_TOKEN_INVALID',
   KEY_NOT_FOUND: 'KEY_NOT_FOUND',
 
   // provider

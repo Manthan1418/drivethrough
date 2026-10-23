@@ -178,7 +178,7 @@ export const shares = pgTable('shares', {
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   role: shareRole('role').notNull().default('viewer'),
   createdAt: ts(),
-}, (t) => [index('shares_token_hash').on(t.tokenHash)]);
+}, (t) => [index('shares_token_hash').on(t.tokenHash), index('shares_file').on(t.fileId)]);
 
 // ---- preview_tokens ----
 export const previewTokens = pgTable('preview_tokens', {
@@ -186,7 +186,7 @@ export const previewTokens = pgTable('preview_tokens', {
   fileId: uuid('file_id').notNull().references(() => files.id, { onDelete: 'cascade' }),
   tokenHash: varchar('token_hash', { length: 64 }).notNull().unique(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-}, (t) => [index('preview_tokens_token_hash').on(t.tokenHash)]);
+}, (t) => [index('preview_tokens_token_hash').on(t.tokenHash), index('preview_tokens_expires').on(t.expiresAt)]);
 
 // ---- api_keys ----
 export const apiKeys = pgTable('api_keys', {
@@ -199,6 +199,17 @@ export const apiKeys = pgTable('api_keys', {
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   createdAt: ts(),
+}, (t) => [index('api_keys_user').on(t.userId)]);
+
+// ---- rate_limits (in-Postgres fixed window — tech.md §4; serverless-safe, no memory
+// counters). ONE row per bucket, rolled over in place by the upsert (window_start moves
+// forward), so the table is bounded by active buckets, not by requests. Rows idle > 1 h
+// are deleted opportunistically by the next hit on that bucket (and wholesale by the
+// P0.5 daily session/token cleanup job).)
+export const rateLimits = pgTable('rate_limits', {
+  bucket: varchar('bucket', { length: 255 }).primaryKey(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  count: integer('count').notNull().default(0),
 });
 
 // ---- oauth_states (connect-a-account flow) ----

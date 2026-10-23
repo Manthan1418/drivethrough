@@ -55,7 +55,7 @@ export interface FileMeta {
 export interface Share {
   id: string;
   fileId: string;
-  token: string; // only ever returned on create; lookups are by hash server-side
+  token: string | null; // raw value ONLY on create; null on idempotent replay (hashed at rest)
   enabled: boolean;
   expiresAt: string | null;
   role: 'viewer';

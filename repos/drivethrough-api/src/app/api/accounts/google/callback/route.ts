@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleGoogleCallback } from '@/server/accounts/connect-service';
 import { AppError, safeDetail, toApiError } from '@/server/errors';
+import { clientIp, rateLimit } from '@/server/ratelimit';
 
 function frontendBase(): string {
   return (process.env.FRONTEND_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
@@ -24,6 +25,9 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // auth-endpoint limit (10/min/IP) INSIDE the try so a 429 rides the normal
+    // `?connect=error&reason=…` redirect instead of dumping JSON into a browser navigation
+    await rateLimit(`auth:${clientIp(req)}`, 10);
     await handleGoogleCallback(code, state);
     return NextResponse.redirect(`${frontendBase()}/settings?connected=1`, { status: 303 });
   } catch (err) {

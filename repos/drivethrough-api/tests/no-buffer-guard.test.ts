@@ -36,7 +36,11 @@ function stripComments(src: string): string {
 }
 
 const uploadRoutes = collectRouteFiles(path.join(API_ROOT, 'uploads'));
-const contentRoute = path.join(API_ROOT, 'files', '[id]', 'content', 'route.ts');
+const v1UploadRoutes = collectRouteFiles(path.join(API_ROOT, 'v1', 'uploads'));
+const contentRoutes = [
+  path.join(API_ROOT, 'files', '[id]', 'content', 'route.ts'),
+  path.join(API_ROOT, 'preview', '[token]', 'route.ts'), // public stream (P0.4)
+];
 
 describe('no-buffer guard (tech.md §9)', () => {
   it('finds the upload route surface (init/reserve/chunk/state/complete/abort)', () => {
@@ -44,8 +48,13 @@ describe('no-buffer guard (tech.md §9)', () => {
     expect(uploadRoutes.length).toBeGreaterThanOrEqual(6);
   });
 
+  it('finds the external v1 upload surface (create/state/chunk/complete/abort)', () => {
+    // 5 routes: route.ts, [id], [id]/chunk, [id]/complete, [id]/abort (P0.4)
+    expect(v1UploadRoutes.length).toBeGreaterThanOrEqual(5);
+  });
+
   it('no upload route reads or buffers a request body', () => {
-    for (const file of uploadRoutes) {
+    for (const file of [...uploadRoutes, ...v1UploadRoutes]) {
       const src = stripComments(readFileSync(file, 'utf8'));
       for (const { re, why } of FORBIDDEN) {
         expect(re.test(src), `${path.relative(API_ROOT, file)}: ${why}`).toBe(false);
@@ -61,11 +70,21 @@ describe('no-buffer guard (tech.md §9)', () => {
     expect(/req\.(json|arrayBuffer|text|formData)\s*\(/.test(src)).toBe(false);
   });
 
-  it('the content route only streams (Range proxy never reads a body)', () => {
-    const src = stripComments(readFileSync(contentRoute, 'utf8'));
-    for (const { re, why } of FORBIDDEN) {
-      expect(re.test(src), `files/[id]/content: ${why}`).toBe(false);
-    }
+  it('the v1 chunk route streams req.body straight through', () => {
+    const chunk = v1UploadRoutes.find((f) => f.includes(path.join('chunk', 'route.ts')));
+    expect(chunk).toBeDefined();
+    const src = stripComments(readFileSync(chunk!, 'utf8'));
+    expect(src).toContain('req.body');
     expect(/req\.(json|arrayBuffer|text|formData)\s*\(/.test(src)).toBe(false);
+  });
+
+  it('content routes only stream (Range proxies never read a body)', () => {
+    for (const file of contentRoutes) {
+      const src = stripComments(readFileSync(file, 'utf8'));
+      for (const { re, why } of FORBIDDEN) {
+        expect(re.test(src), `${path.relative(API_ROOT, file)}: ${why}`).toBe(false);
+      }
+      expect(/req\.(json|arrayBuffer|text|formData)\s*\(/.test(src), file).toBe(false);
+    }
   });
 });

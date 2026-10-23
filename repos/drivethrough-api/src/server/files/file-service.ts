@@ -119,6 +119,15 @@ export async function getFile(userId: string, id: string): Promise<FileMeta> {
 
 export async function updateFile(userId: string, id: string, input: UpdateFileRequest): Promise<FileMeta> {
   const db = getDb();
+
+  // Trash/restore dispatch FIRST: they carry their own precise status guards
+  // (active-only / deleted-only below), while this function's rename/move path
+  // requires an ACTIVE row — loading 'active' up front made `PATCH {trashed:false}`
+  // on a trashed file 404 before it could ever reach restoreFile (caught live by the
+  // P0.4 e2e suite 2026-10-23; the trash-view Restore button was dead for files).
+  if (input.trashed === true) return trashFile(userId, id);
+  if (input.trashed === false) return restoreFile(userId, id);
+
   const row = await loadFile(db, userId, id, 'active');
   const sets: Partial<typeof files.$inferInsert> = {};
 
@@ -130,8 +139,6 @@ export async function updateFile(userId: string, id: string, input: UpdateFileRe
     if (target) await assertLiveFolder(db, userId, target);
     sets.folderId = target;
   }
-  if (input.trashed === true) return trashFile(userId, id);
-  if (input.trashed === false) return restoreFile(userId, id);
 
   if (Object.keys(sets).length === 0) return toWire(row);
   const [updated] = await db

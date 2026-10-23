@@ -29,6 +29,13 @@
       "when": 1792686828610,
       "tag": "0003_upload_provider_file_id",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792768630538,
+      "tag": "0004_shiny_champions",
+      "breakpoints": true
     }
   ]
 }

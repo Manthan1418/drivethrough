@@ -3,7 +3,7 @@
 // Win98 controls: beveled buttons (press swaps the bevel — authentic), sunken fields,
 // and the segmented progress bar. All motion stays inside the 120–180 ms envelope.
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type ReactNode } from 'react';
 
 type ButtonVariant = 'default' | 'primary' | 'danger' | 'quiet';
 
@@ -49,6 +49,28 @@ export const RetroInput = forwardRef<HTMLInputElement, RetroInputProps>(function
         className={`h-7 w-full bg-transparent px-2 text-[13px] text-ink outline-none placeholder:text-ink-faint ${className}`}
         {...rest}
       />
+    </div>
+  );
+});
+
+interface RetroSelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
+  wrapperClassName?: string;
+}
+
+/** Native <select> in a sunken field — the dropdown itself is OS-rendered (authentic). */
+export const RetroSelect = forwardRef<HTMLSelectElement, RetroSelectProps>(function RetroSelect(
+  { className = '', wrapperClassName = '', children, ...rest },
+  ref
+) {
+  return (
+    <div className={`bevel-sunken bg-face-field ${wrapperClassName}`}>
+      <select
+        ref={ref}
+        className={`h-7 w-full cursor-pointer bg-transparent px-1.5 text-[13px] text-ink outline-none ${className}`}
+        {...rest}
+      >
+        {children}
+      </select>
     </div>
   );
 });

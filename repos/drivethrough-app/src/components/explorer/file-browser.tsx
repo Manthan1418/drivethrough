@@ -13,10 +13,11 @@ import { RetroButton, RetroInput } from '@/components/retro/controls';
 import { RetroMenu, type MenuItem } from '@/components/retro/menu';
 import { ConfirmDialog, RetroDialog } from '@/components/retro/dialog';
 import {
-  IconAlert, IconFile, IconFolder, IconMove, IconNewFolder, IconRename, IconSearch, IconTrash, IconUpload,
+  IconAlert, IconFile, IconFolder, IconMove, IconNewFolder, IconRename, IconSearch, IconShare, IconTrash, IconUpload,
 } from '@/components/retro/icons';
 import { PreviewWindow, downloadFileMeta, type PreviewFile } from './preview';
 import { MoveDialog } from './move-dialog';
+import { ShareDialog } from './share-dialog';
 import type { FileMeta, Folder } from '@drivethrough/contracts';
 
 type SelectionKey = string; // `f:<id>` | `d:<id>`
@@ -59,6 +60,7 @@ export function FileBrowser({
     | { kind: 'rename'; target: SelectionKey }
     | { kind: 'move'; keys: SelectionKey[] }
     | { kind: 'trash'; keys: SelectionKey[] }
+    | { kind: 'share'; target: SelectionKey }
     | null
   >(null);
   const [preview, setPreview] = useState<PreviewFile | null>(null);
@@ -255,6 +257,7 @@ export function FileBrowser({
       const one: MenuItem[] = [
         { label: 'Open', onClick: () => openItem(key) },
         ...(isFolder ? [] : [{ label: 'Save to disk', onClick: () => { const f = files.find((x) => `f:${x.id}` === key); if (f) void doDownload(f); } }]),
+        ...(isFolder ? [] : [{ label: 'Share link…', icon: <IconShare size={14} />, onClick: () => setDialog({ kind: 'share', target: key }) }]),
         { label: 'Rename…', icon: <IconRename size={14} />, separatorBefore: true, onClick: () => setDialog({ kind: 'rename', target: key }) },
         { label: 'Move to…', icon: <IconMove size={14} />, onClick: () => setDialog({ kind: 'move', keys: [...(selection.size > 1 ? selection : new Set([key]))] }) },
         { label: 'Move to Trash', icon: <IconTrash size={14} />, danger: true, separatorBefore: true, onClick: () => setDialog({ kind: 'trash', keys: [...(selection.size > 1 ? selection : new Set([key]))] }) },
@@ -525,6 +528,12 @@ export function FileBrowser({
           onCancel={() => setDialog(null)}
         />
       )}
+
+      {dialog?.kind === 'share' &&
+        (() => {
+          const f = files.find((x) => x.id === dialog.target.slice(2));
+          return f ? <ShareDialog file={f} onClose={() => setDialog(null)} /> : null;
+        })()}
 
       {preview && <PreviewWindow file={preview} onClose={() => setPreview(null)} />}
     </div>

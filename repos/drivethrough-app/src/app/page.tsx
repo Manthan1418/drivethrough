@@ -15,22 +15,25 @@ import { FileBrowser, type Crumb } from '@/components/explorer/file-browser';
 import { TrashView } from '@/components/explorer/trash-view';
 import { ActivityView } from '@/components/explorer/activity-view';
 import { UploadDock } from '@/components/explorer/upload-dock';
+import { KeysView } from '@/components/explorer/keys-view';
 import { RetroWindow } from '@/components/retro/window';
 import { ConnectionsPanel } from '@/components/settings/connections';
 import { RetroButton } from '@/components/retro/controls';
-import { IconFolder, IconGear, IconList, IconTrash, IconX } from '@/components/retro/icons';
+import { IconFolder, IconGear, IconKey, IconList, IconTrash, IconX } from '@/components/retro/icons';
 
 const TITLES: Record<ExplorerView, string> = {
   files: 'My Files',
   recent: 'Recent',
   trash: 'Recycle Bin',
   activity: 'Activity Log',
+  keys: 'API Keys',
 };
 const VIEW_ICONS: Record<ExplorerView, React.ReactNode> = {
   files: <IconFolder size={14} />,
   recent: <IconFolder size={14} />,
   trash: <IconTrash size={14} />,
   activity: <IconList size={14} />,
+  keys: <IconKey size={14} />,
 };
 
 export default function HomePage() {
@@ -81,7 +84,7 @@ function Explorer() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const v = p.get('view');
-    if (v === 'recent' || v === 'trash' || v === 'activity') setView(v);
+    if (v === 'recent' || v === 'trash' || v === 'activity' || v === 'keys') setView(v);
     const f = p.get('folder');
     if (f) setFolderId(f);
   }, []);
@@ -165,6 +168,7 @@ function Explorer() {
             )}
             {view === 'trash' && <TrashView refreshKey={refreshKey} onMutated={bump} />}
             {view === 'activity' && <ActivityView refreshKey={refreshKey} />}
+            {view === 'keys' && <KeysView refreshKey={refreshKey} />}
           </div>
         </RetroWindow>
       </main>

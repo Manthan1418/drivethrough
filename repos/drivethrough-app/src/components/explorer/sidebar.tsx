@@ -8,16 +8,17 @@ import { useAuth } from '@/client/auth-context';
 import { getStorageSummary } from '@/client/files';
 import { humanBytes } from '@/client/uploads';
 import { RetroButton, RetroProgress } from '@/components/retro/controls';
-import { IconClock, IconFolder, IconGear, IconList, IconTrash } from '@/components/retro/icons';
+import { IconClock, IconFolder, IconGear, IconKey, IconList, IconTrash } from '@/components/retro/icons';
 import type { StorageSummary } from '@drivethrough/contracts';
 
-export type ExplorerView = 'files' | 'recent' | 'trash' | 'activity';
+export type ExplorerView = 'files' | 'recent' | 'trash' | 'activity' | 'keys';
 
 const NAV: { id: ExplorerView; label: string; icon: React.ReactNode }[] = [
   { id: 'files', label: 'My Files', icon: <IconFolder size={16} /> },
   { id: 'recent', label: 'Recent', icon: <IconClock size={16} /> },
   { id: 'trash', label: 'Trash', icon: <IconTrash size={16} /> },
   { id: 'activity', label: 'Activity', icon: <IconList size={16} /> },
+  { id: 'keys', label: 'API Keys', icon: <IconKey size={16} /> },
 ];
 
 export function Sidebar({

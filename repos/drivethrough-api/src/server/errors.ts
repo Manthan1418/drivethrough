@@ -9,6 +9,7 @@ const STATUS_BY_CODE: Record<string, number> = {
   [ErrorCodes.FORBIDDEN]: 403,
   [ErrorCodes.SHARE_NOT_FOUND]: 404,
   [ErrorCodes.SHARE_EXPIRED]: 410,
+  [ErrorCodes.PREVIEW_TOKEN_INVALID]: 404,
   [ErrorCodes.KEY_NOT_FOUND]: 404,
   [ErrorCodes.RATE_LIMITED]: 429,
   [ErrorCodes.ACCOUNT_NEEDS_REAUTH]: 409,

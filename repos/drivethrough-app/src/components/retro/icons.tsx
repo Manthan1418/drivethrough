@@ -230,3 +230,24 @@ export function IconRestore(rest: IconProps) {
     </Svg>
   );
 }
+
+export function IconShare(rest: IconProps) {
+  return (
+    <Svg {...rest}>
+      {/* chain link — two interlocking links, navy like the rest of the action icons */}
+      <rect x="1" y="6" width="8" height="4" rx="2" fill="none" stroke="#000080" strokeWidth="2" />
+      <rect x="7" y="6" width="8" height="4" rx="2" fill="none" stroke="#000080" strokeWidth="2" />
+    </Svg>
+  );
+}
+
+export function IconKey(rest: IconProps) {
+  return (
+    <Svg {...rest}>
+      <circle cx="5" cy="8" r="3.5" fill="none" stroke="#8a5f00" strokeWidth="2" />
+      <rect x="8" y="7" width="7" height="2" fill="#e8c400" />
+      <rect x="12" y="9" width="2" height="2" fill="#e8c400" />
+      <rect x="9" y="9" width="2" height="2" fill="#e8c400" />
+    </Svg>
+  );
+}

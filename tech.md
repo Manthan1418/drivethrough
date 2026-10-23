@@ -114,10 +114,12 @@ oauth_states          id, provider, state_hash, code_verifier(PKCE S256), flow, 
 provider_configs      id, provider UNIQUE, client_id_enc, client_secret_enc (write-only), redirect_uri, created_at, updated_at
 invites               id, inviter_id, email, target_type, target_id, role, status
 audit_logs            id, user_id?, action, entity_type, entity_id, metadata jsonb, created_at
+rate_limits           bucket PK (≤255 chars: 'auth:<ip>' | 'shm:<ip>' | 'pv:<ip>' | 'ck:<userId>' | 'v1:<keyId>'),
+                      window_start, count      -- fixed-window counters; old rows swept opportunistically
 ```
 
 **Indexes required before hot paths** (9Drive lesson kept):  
-`files(user_id, status, folder_id, created_at DESC)`, `files(user_id, status, name)`, `uploads(user_id, status)`, `upload_chunks(upload_id, index)`, `reservations(account_id)`, `audit_logs(user_id, created_at)`, `shares(token_hash)`, `preview_tokens(token_hash)`.
+`files(user_id, status, folder_id, created_at DESC)`, `files(user_id, status, name)`, `uploads(user_id, status)`, `upload_chunks(upload_id, index)`, `reservations(account_id)`, `audit_logs(user_id, created_at)`, `shares(token_hash)`, `preview_tokens(token_hash)`, plus P0.4: `shares(file_id)`, `api_keys(user_id)`, `preview_tokens(expires_at)` (TTL cleanup).
 
 **Quota invariant:** `storage_usage.used_bytes = Σ active files on account` and `reserved_bytes = Σ live reservations` — both maintained transactionally (upload completion adds usage; reservation add/remove in same txn as placement). A daily job recomputes and repairs drift.
 
@@ -143,7 +145,8 @@ audit_logs            id, user_id?, action, entity_type, entity_id, metadata jso
 
 Full route list: [flow.md §9](./flow.md). Contract requirements:
 
-- Auth: Firebase ID token via `Authorization: Bearer <idToken>` (bearer-only — cross-origin two-repo boundary, no session cookies); `Authorization: Bearer <api-key>` for `/api/v1/*`.
+- Auth: Firebase ID token via `Authorization: Bearer <idToken>` (bearer-only — cross-origin two-repo boundary, no session cookies); `Authorization: Bearer <api-key>` for `/api/v1/*` — the v1 surface is KEY-ONLY: a session bearer is honestly rejected 401 `UNAUTHENTICATED`, never silently upgraded.
+- Sharing & preview capabilities: tokens (`dsh_` share · `dtp_` preview · `dtk_` key) are generated with 32 bytes of CSPRNG entropy, stored as SHA-256 hashes only, and the raw value leaves the server exactly once (create response). Prefix routing means an unknown token404s uniformly (`SHARE_NOT_FOUND` / `PREVIEW_TOKEN_INVALID`) — no oracle on which table it almost belongs to. Preview tokens carry a 10-min TTL; share tokens are liveness-checked against `shares.enabled` + `files.status` + `expires_at` on EVERY request (revoke is instant, not eventual). `contentDisposition` lives in `server/files/disposition.ts` (Next.js forbids extra route exports).
 - All bodies JSON ≤ 4.5 MB; uploads are `PUT` with `Content-Range` raw binary body (NOT multipart — avoids framing overhead and keeps chunk exactly ≤ 4 MB; the `init` call carries metadata).
 - Errors: `{ code: string, message: string }`, HTTP status semantically correct; codes stable (`UNAUTHENTICATED`, `NO_ACCOUNT_WITH_ENOUGH_SPACE`, `UPLOAD_SIZE_MISMATCH`, `CHUNK_OUT_OF_ORDER`, `ACCOUNT_NEEDS_REAUTH`, `RATE_LIMITED`, `FILE_TOO_LARGE_FOR_PLAN`).
 - Upload protocol (server-authoritative offset):
@@ -153,7 +156,7 @@ Full route list: [flow.md §9](./flow.md). Contract requirements:
   - `GET /api/uploads/:id` → `{ status, committedOffset }` for resume (server verifies against provider `308 range` when ambiguous).
   - `POST /api/uploads/:id/complete` → validates byte totals, creates `files` row(s), releases reservation, enqueues quota sync.
   - `POST /api/uploads/:id/abort` → releases reservation, kills provider session.
-- Rate limits: auth endpoints (10/min/IP), chunk endpoint (sustained-friendly but bounded: e.g. 600/min/user to allow 4 MB × 10/s), API-key uploads keyed by user+key. In-Postgres fixed-window or Upstash Redis if needed; must work serverless (no memory counters).
+- Rate limits (built — in-Postgres fixed-window on `rate_limits`, atomic upsert + opportunistic 2% row sweep; serverless-safe, zero extra services): auth endpoints **10/min/IP** (checked BEFORE token verification so abuse never burns JWKS lookups), share metadata **60/min/IP**, preview content **300/min/IP**, internal chunk **600/min/user** (≈ 10 × 4 MB/s sustained), `/api/v1` **600/min/key**. `clientIp` = first `x-forwarded-for` entry (Vercel overwrites the header from the client side — never trust later entries). Over-limit → 429 `RATE_LIMITED`. Implementation gotcha (live-caught): `db.execute` params go through postgres.js's prepared Bind path, which crashes on JS `Date` — bind `toISOString()` strings for timestamptz columns.
 
 ---
 
@@ -298,7 +301,7 @@ CI/CD: GitHub Actions (typecheck+test) → Vercel preview deploy per PR → prod
 | **P0.1 – Foundation** | repo scaffold, Next.js app shell, Firebase Auth (sign-in + token guard), Postgres schema+migrations, crypto vault, provider interface + S3 provider *(S3 part deferred — no MinIO/R2 owner setup exists yet; interface shipped, Drive provider came first)* | sign-in works, connect MinIO/R2 *(Drive connect done instead)*, quota shows |
 | **P0.2 – Google** | Google provider: OAuth connect, resumable upload proxy, Range download proxy, quota sync | real Drive E2E contract test green — ✅ 2026-10-22, 8/8 live (`tests/e2e-drive-contract.test.ts`, `npm run test:e2e`) |
 | **P0.3 – Core UX** | folders/files CRUD, uploader UI w/ resume, trash, search, activity | e2e "flaky mobile upload" passes — ✅ 2026-10-22, 14/14 live (`tests/e2e-drive-contract.test.ts`, `npm run test:e2e`) |
-| **P0.4 – Sharing/API** | shares+preview tokens, public page, API keys, `/api/v1/uploads`, rate limits | revoke test passes |
+| **P0.4 – Sharing/API** | shares+preview tokens, public page, API keys, `/api/v1/uploads`, rate limits | revoke test passes — ✅ 2026-10-23, 19/19 live (`tests/e2e-drive-contract.test.ts`, `npm run test:e2e`: share dies 404 within seconds of revoke, key 401s, 429 limiter) + 12/12 browser sweep (share dialog → public page → revoke → keys view) |
 | **P0.5 – Jobs+cron** | reconcile, purge, session GC, quota cron, **metadata backup (daily dump → R2)**, health | jobs idempotent **at daily cadence**; dump restores clean in a test DB; dashboard diagnostics |
 | **P0.6 – Harden** | guard tests, load test, docs polish, attribution | all §9 gates green → **v1 ship** |
 | **P1** | striping, whole-file dedup, PWA offline queue, 2FA, versioning | per prd §5.2 |
