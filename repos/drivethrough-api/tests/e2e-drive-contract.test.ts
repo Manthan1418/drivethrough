@@ -55,6 +55,7 @@ import { POST as v1PostUploads } from '../src/app/api/v1/uploads/route';
 import { GET as v1GetUpload } from '../src/app/api/v1/uploads/[id]/route';
 import { PUT as v1PutChunk } from '../src/app/api/v1/uploads/[id]/chunk/route';
 import { POST as v1PostComplete } from '../src/app/api/v1/uploads/[id]/complete/route';
+import { POST as v1PostAbort } from '../src/app/api/v1/uploads/[id]/abort/route';
 import { GET as googleStartRoute } from '../src/app/api/accounts/google/start/route';
 
 import { getDb } from '../src/server/db/client';
